@@ -21,7 +21,7 @@ export default function HomePage() {
           <div className="hidden items-center gap-5 text-white/70 sm:flex">
             <Link
               href="mailto:help@gettymedicalstore.com"
-              className="transition hover:text-white cursor-pointer"
+              className="transition hover:text-white cursor-po"
             >
               help@gettymedicalstore.com
             </Link>
