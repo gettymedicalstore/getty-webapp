@@ -1,0 +1,37 @@
+import { queryOptions } from "@tanstack/react-query"
+
+import { queryKeys } from "@/lib/query/query-keys"
+
+import type { Wishlist } from "../types/wishlist"
+
+export const WISHLIST_STORAGE_KEY = "getty-medical-store-wishlist"
+
+export async function getWishlist(): Promise<Wishlist> {
+  if (typeof window === "undefined") {
+    return { products: [] }
+  }
+
+  const stored = window.localStorage.getItem(WISHLIST_STORAGE_KEY)
+
+  if (!stored) {
+    return { products: [] }
+  }
+
+  try {
+    const parsed = JSON.parse(stored)
+
+    return {
+      products: Array.isArray(parsed) ? parsed : [],
+    }
+  } catch {
+    return { products: [] }
+  }
+}
+
+export function wishlistQueryOptions() {
+  return queryOptions({
+    queryKey: queryKeys.wishlist.all,
+    queryFn: getWishlist,
+    staleTime: Infinity,
+  })
+}
