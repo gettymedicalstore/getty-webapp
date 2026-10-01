@@ -2,16 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query"
 
+import type { MockUser } from "@/features/auth/server/mock-session"
+
 export const authSessionQueryKey = ["auth", "session"] as const
 
-export type AuthUser = {
-  id: string
-  email: string
-  name: string
-}
-
 export type AuthSession = {
-  user: AuthUser | null
+  user: MockUser | null
+  message?: string
 }
 
 async function getAuthSession(): Promise<AuthSession> {
@@ -24,9 +21,7 @@ async function getAuthSession(): Promise<AuthSession> {
     },
   })
 
-  const result = (await response.json()) as AuthSession & {
-    message?: string
-  }
+  const result = (await response.json()) as AuthSession
 
   if (!response.ok) {
     throw new Error(result.message ?? "Unable to load the current session.")
@@ -43,6 +38,7 @@ export function useAuthSession() {
     queryFn: getAuthSession,
     staleTime: 0,
     retry: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   })
 }

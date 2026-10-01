@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 type LoginFormProps = {
   onSuccess?: () => void | Promise<void>
   className?: string
+  onForgotPassword?: () => void
 }
 
 type LoginResponse = {
@@ -32,7 +33,11 @@ type LoginResponse = {
 
 type LoginFieldErrors = Partial<Record<keyof LoginInput, string>>
 
-export default function LoginForm({ onSuccess, className }: LoginFormProps) {
+export default function LoginForm({
+  onSuccess,
+  className,
+  onForgotPassword,
+}: LoginFormProps) {
   const [formData, setFormData] = useState<LoginInput>({
     email: "",
     password: "",
@@ -207,13 +212,17 @@ export default function LoginForm({ onSuccess, className }: LoginFormProps) {
 
             <span>Remember me</span>
           </label>
+          <button
+            type="button"
 
-          <Link
-            href="/reset-password"
+            onClick={onForgotPassword}
+
+            disabled={isSubmitting}
+
             className="font-inter text-primary text-sm leading-5 font-medium hover:underline"
           >
             Reset Password
-          </Link>
+          </button>
         </div>
 
         {fieldErrors.rememberMe && (

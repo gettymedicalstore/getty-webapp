@@ -5,15 +5,14 @@ import {
   MOCK_SESSION_COOKIE,
   type MockUser,
 } from "@/features/auth/server/mock-session"
-import { Role } from "@/lib/auth/roles"
+import { findMockUserByEmail } from "@/features/auth/server/mock-user-repository"
+import { verifyPassword } from "@/lib/auth/password"
 
 type LoginRequest = {
   email?: unknown
   password?: unknown
   rememberMe?: unknown
 }
-
-const ADMIN_EMAILS = new Set(["admin@gettymedicalstore.com"])
 
 export async function POST(request: Request) {
   try {
@@ -27,44 +26,40 @@ export async function POST(request: Request) {
     const rememberMe = body.rememberMe === true
 
     if (!email || !isValidEmail(email)) {
-      return NextResponse.json(
-        {
-          message: "Enter a valid email address.",
-        },
-        {
-          status: 400,
-        }
-      )
+      return invalidCredentials()
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        {
-          message: "Password must contain at least 6 characters.",
-        },
-        {
-          status: 400,
-        }
-      )
+    if (!password) {
+      return invalidCredentials()
+    }
+
+    const userRecord = await findMockUserByEmail(email)
+
+    if (!userRecord || !userRecord.active) {
+      return invalidCredentials()
+    }
+
+    const passwordMatches = await verifyPassword(
+      password,
+      userRecord.passwordHash
+    )
+
+    if (!passwordMatches) {
+      return invalidCredentials()
     }
 
     const user: MockUser = {
-      id: crypto.randomUUID(),
-      email,
-      name: getDisplayName(email),
-      phone: "",
-      role: getMockUserRole(email),
+      id: userRecord.id,
+      email: userRecord.email,
+      name: userRecord.name,
+      phone: userRecord.phone,
+      role: userRecord.role,
     }
 
-    const response = NextResponse.json(
-      {
-        message: "Login successful.",
-        user,
-      },
-      {
-        status: 200,
-      }
-    )
+    const response = NextResponse.json({
+      message: "Login successful.",
+      user,
+    })
 
     response.cookies.set({
       name: MOCK_SESSION_COOKIE,
@@ -91,20 +86,17 @@ export async function POST(request: Request) {
   }
 }
 
-function getMockUserRole(email: string): Role {
-  return ADMIN_EMAILS.has(email) ? Role.ADMIN : Role.CUSTOMER
+function invalidCredentials() {
+  return NextResponse.json(
+    {
+      message: "The email address or password is incorrect.",
+    },
+    {
+      status: 401,
+    }
+  )
 }
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-}
-
-function getDisplayName(email: string) {
-  const localPart = email.split("@")[0] || "User"
-
-  return localPart
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ")
 }

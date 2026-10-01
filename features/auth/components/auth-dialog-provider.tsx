@@ -1,17 +1,24 @@
 "use client"
 
+import { useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react"
-import { useRouter } from "next/navigation"
-import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
-import LoginDialog from "./login-dialog"
+import type { MockUser } from "@/features/auth/server/mock-session"
+import { Role } from "@/lib/auth/roles"
+
+import AuthDialog from "./auth-dialog"
+
+export type AuthDialogView = "login" | "forgot-password"
 
 type LoginSuccessHandler = () => void | Promise<void>
 
@@ -21,8 +28,15 @@ type OpenLoginOptions = {
 
 type AuthDialogContextValue = {
   openLogin: (options?: OpenLoginOptions) => void
-  closeLogin: () => void
-  isLoginOpen: boolean
+  openForgotPassword: () => void
+  showLogin: () => void
+  closeAuthDialog: () => void
+  isAuthDialogOpen: boolean
+  currentView: AuthDialogView
+}
+
+type SessionResponse = {
+  user: MockUser | null
 }
 
 const AuthDialogContext = createContext<AuthDialogContextValue | null>(null)
@@ -36,17 +50,29 @@ export default function AuthDialogProvider({
   const queryClient = useQueryClient()
 
   const [open, setOpen] = useState(false)
+  const [view, setView] = useState<AuthDialogView>("login")
 
   const successHandlerRef = useRef<LoginSuccessHandler | null>(null)
 
   const openLogin = useCallback((options?: OpenLoginOptions) => {
     successHandlerRef.current = options?.onSuccess ?? null
 
+    setView("login")
     setOpen(true)
   }, [])
 
-  const closeLogin = useCallback(() => {
+  const openForgotPassword = useCallback(() => {
+    setView("forgot-password")
+    setOpen(true)
+  }, [])
+
+  const showLogin = useCallback(() => {
+    setView("login")
+  }, [])
+
+  const closeAuthDialog = useCallback(() => {
     setOpen(false)
+    setView("login")
     successHandlerRef.current = null
   }, [])
 
@@ -54,39 +80,92 @@ export default function AuthDialogProvider({
     setOpen(nextOpen)
 
     if (!nextOpen) {
+      setView("login")
       successHandlerRef.current = null
     }
   }, [])
 
   const handleLoginSuccess = useCallback(async () => {
-    const successHandler = successHandlerRef.current
+    const customSuccessHandler = successHandlerRef.current
 
-    setOpen(false)
-    successHandlerRef.current = null
+    try {
+      /*
+       * Read the newly-created HTTP-only session cookie.
+       */
+      const response = await fetch("/api/auth/session", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      })
 
-    await queryClient.invalidateQueries({
-      queryKey: ["auth", "session"],
-    })
+      if (!response.ok) {
+        throw new Error("Your session could not be loaded after login.")
+      }
 
-    router.refresh()
+      const session = (await response.json()) as SessionResponse
 
-    await successHandler?.()
+      if (!session.user) {
+        throw new Error("Your session could not be loaded after login.")
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: ["auth", "session"],
+      })
+
+      setOpen(false)
+      setView("login")
+      successHandlerRef.current = null
+
+      /*
+       * Checkout and other protected actions may provide their own
+       * continuation callback. In that case, do not redirect away.
+       */
+      if (customSuccessHandler) {
+        await customSuccessHandler()
+        router.refresh()
+        return
+      }
+
+      const destination =
+        session.user.role === Role.ADMIN ? "/admin" : "/customer"
+
+      router.replace(destination)
+      router.refresh()
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Your session could not be loaded after login."
+      )
+    }
   }, [queryClient, router])
 
+  const contextValue = useMemo<AuthDialogContextValue>(
+    () => ({
+      openLogin,
+      openForgotPassword,
+      showLogin,
+      closeAuthDialog,
+      isAuthDialogOpen: open,
+      currentView: view,
+    }),
+    [openLogin, openForgotPassword, showLogin, closeAuthDialog, open, view]
+  )
+
   return (
-    <AuthDialogContext.Provider
-      value={{
-        openLogin,
-        closeLogin,
-        isLoginOpen: open,
-      }}
-    >
+    <AuthDialogContext.Provider value={contextValue}>
       {children}
 
-      <LoginDialog
+      <AuthDialog
         open={open}
+        view={view}
         onOpenChange={handleOpenChange}
-        onSuccess={handleLoginSuccess}
+        onLoginSuccess={handleLoginSuccess}
+        onShowLogin={showLogin}
+        onShowForgotPassword={openForgotPassword}
       />
     </AuthDialogContext.Provider>
   )
