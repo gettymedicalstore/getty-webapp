@@ -10,7 +10,7 @@ export const checkoutSchema = z.object({
   city: z.string().trim().min(2),
   state: z.string().trim().min(2),
   deliveryNote: z.string().trim().max(500).optional(),
-  paymentMethod: z.enum(["card", "bank-transfer", "pay-on-delivery"]),
+  paymentMethod: z.literal("card"),
 })
 
 export type CheckoutFormSchema = z.infer<typeof checkoutSchema>

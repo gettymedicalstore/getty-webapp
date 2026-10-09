@@ -1,4 +1,5 @@
 import Link from "next/link"
+import AppLogo from "@/components/shared/app-logo"
 
 import AdminNavigation from "../navigation/admin-navigation"
 
@@ -7,12 +8,7 @@ export default function AdminSidebar() {
     <aside className="bg-background fixed inset-y-0 left-0 z-40 hidden w-72 border-r lg:flex lg:flex-col">
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/admin" className="leading-tight">
-          <span className="text-primary block text-lg font-black">
-            Getty Medical
-          </span>
-          <span className="text-muted-foreground block text-[10px] font-bold tracking-[0.18em] uppercase">
-            Admin Portal
-          </span>
+          <AppLogo className="h-auto w-full max-w-[210px]" />
         </Link>
       </div>
 

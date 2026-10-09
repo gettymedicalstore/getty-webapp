@@ -19,12 +19,12 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
 
+import { isProductInStock, productMaximum } from "../../utils/availability"
 import type { Product } from "../../types/product"
 import { Facebook } from "@/components/svgs/socials"
 import Link from "next/link"
@@ -61,8 +61,8 @@ export default function ProductDetailsDialog({
   const rating = Math.min(5, Math.max(0, product.rating ?? 0))
 
   const canDecrease = quantity > 1
-  const canIncrease = quantity < product.stock
-  const isOutOfStock = product.stock <= 0
+  const canIncrease = quantity < productMaximum(product)
+  const isOutOfStock = !isProductInStock(product)
 
   function previousImage() {
     setSelectedImageIndex((current) =>
@@ -91,12 +91,20 @@ export default function ProductDetailsDialog({
   function handleAddToCart() {
     if (isOutOfStock) return
 
+    if (product.source === "remote") {
+      window.location.assign(`/products/${product.slug}`)
+      return
+    }
     onAddToCart?.(product, quantity)
   }
 
   function handleBuyNow() {
     if (isOutOfStock) return
 
+    if (product.source === "remote") {
+      window.location.assign(`/products/${product.slug}`)
+      return
+    }
     onBuyNow?.(product, quantity)
   }
 
@@ -126,6 +134,7 @@ export default function ProductDetailsDialog({
 
         <button
           type="button"
+          onClick={() => onOpenChange(false)}
           aria-label="Close product details"
           className="fixed top-6 right-6 z-50 grid size-11 cursor-pointer place-items-center rounded-full bg-white/30 text-white backdrop-blur-sm transition hover:bg-white/45 lg:absolute lg:-top-1 lg:-right-16"
         >
@@ -151,7 +160,7 @@ export default function ProductDetailsDialog({
                 {product.name}
               </h2>
 
-              <p className="mt-3 text-sm leading-6 text-[#717680]">
+              <p className="mt-3 text-sm leading-6 text-[#5e6f63]">
                 {product.description}
               </p>
 
@@ -179,14 +188,22 @@ export default function ProductDetailsDialog({
                     <span>Availability: </span>
 
                     <strong className="font-semibold text-[#252B37]">
-                      {product.stock.toLocaleString("en-NG")} in stock
+                      {product.stockKnown === false
+                        ? isOutOfStock
+                          ? "Out of stock"
+                          : "In stock"
+                        : `${product.stock.toLocaleString("en-NG")} in stock`}
                     </strong>
 
-                    <span className="mx-2">|</span>
+                    {product.soldCount !== undefined && (
+                      <>
+                        <span className="mx-2">|</span>
 
-                    <strong className="font-semibold text-[#252B37]">
-                      {(product.soldCount ?? 0).toLocaleString("en-NG")} sold
-                    </strong>
+                        <strong className="font-semibold text-[#252B37]">
+                          {product.soldCount.toLocaleString("en-NG")} sold
+                        </strong>
+                      </>
+                    )}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3">
@@ -196,7 +213,7 @@ export default function ProductDetailsDialog({
                       type="button"
                       onClick={copyProductLink}
                       aria-label="Copy product link"
-                      className="hover:text-primary text-[#717680] transition"
+                      className="hover:text-primary text-[#5e6f63] transition"
                     >
                       <Copy className="size-4" />
                     </button>
@@ -208,7 +225,7 @@ export default function ProductDetailsDialog({
                       target="_blank"
                       rel="noreferrer"
                       aria-label="Share on Facebook"
-                      className="hover:text-primary text-[#717680] transition"
+                      className="hover:text-primary text-[#5e6f63] transition"
                     >
                       <Facebook className="size-4" />
                     </Link>
@@ -325,6 +342,7 @@ function ProductGallery({
     <div className="border-b border-[#E9EAEB] p-5 sm:p-8 lg:border-r lg:border-b-0">
       <div className="relative aspect-[1.3/1] overflow-hidden rounded-md border border-[#E9EAEB] bg-white">
         <Image
+          unoptimized
           src={selectedImage}
           alt={productName}
           fill
@@ -361,6 +379,7 @@ function ProductGallery({
                 }`}
               >
                 <Image
+                  unoptimized
                   src={image}
                   alt={`${productName} image ${index + 1}`}
                   fill

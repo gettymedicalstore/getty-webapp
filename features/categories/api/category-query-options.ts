@@ -2,18 +2,12 @@ import { queryOptions } from "@tanstack/react-query"
 
 import { queryKeys } from "@/lib/query/query-keys"
 
-import { mockCategories } from "../data/mock-categories"
-import type { Category } from "../types/category"
-
-export async function getCategories(): Promise<Category[]> {
-  return mockCategories.filter((category) => category.active)
-}
-
-export async function getCategory(slug: string): Promise<Category | null> {
+import { getLiveCategories } from "@/features/products/api/live-catalog"
+export const getCategories = getLiveCategories
+export async function getCategory(slug: string) {
   return (
-    mockCategories.find(
-      (category) => category.slug === slug && category.active
-    ) ?? null
+    (await getLiveCategories()).find((c) => c.slug === slug || c.id === slug) ??
+    null
   )
 }
 

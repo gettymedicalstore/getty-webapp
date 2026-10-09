@@ -1,3 +1,4 @@
+import { isStoredProduct } from "@/features/products/utils/stored-product"
 import { queryOptions } from "@tanstack/react-query"
 
 import { queryKeys } from "@/lib/query/query-keys"
@@ -11,17 +12,17 @@ export async function getWishlist(): Promise<Wishlist> {
     return { products: [] }
   }
 
-  const stored = window.localStorage.getItem(WISHLIST_STORAGE_KEY)
-
-  if (!stored) {
-    return { products: [] }
-  }
-
   try {
-    const parsed = JSON.parse(stored)
-
+    const stored = window.localStorage.getItem(WISHLIST_STORAGE_KEY),
+      parsed: unknown = stored ? JSON.parse(stored) : []
     return {
-      products: Array.isArray(parsed) ? parsed : [],
+      products: Array.isArray(parsed)
+        ? [
+            ...new Map(
+              parsed.filter(isStoredProduct).map((p) => [p.id, p])
+            ).values(),
+          ]
+        : [],
     }
   } catch {
     return { products: [] }

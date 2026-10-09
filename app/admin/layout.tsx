@@ -1,22 +1,14 @@
-import AdminHeader from "@/components/admin/layout/admin-header"
-import AdminSidebar from "@/components/admin/layout/admin-sidebar"
-
-export default function AdminLayout({
+import type { ReactNode } from "react"
+import PortalShell from "@/components/shared/portal-shell"
+import AuthBoundary from "@/features/auth/components/auth-boundary"
+export default async function AdminLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: {
+  children: ReactNode
+}) {
   return (
-    <div className="min-h-screen bg-[#f5f6f7]">
-      <AdminSidebar />
-
-      <div className="lg:pl-72">
-        <AdminHeader />
-
-        <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {children}
-        </main>
-      </div>
-    </div>
+    <AuthBoundary roles={["admin"]}>
+      <PortalShell>{children}</PortalShell>
+    </AuthBoundary>
   )
 }

@@ -1,13 +1,19 @@
 "use client"
 
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { useHydrated } from "@/lib/use-hydrated"
+import { Skeleton } from "@/components/ui/skeleton"
+import { LoadingRegion } from "@/components/shared/loading-skeletons"
+import { ArrowLeft, ArrowRight, Layers3 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRef } from "react"
 
-import { mockCategories } from "@/features/categories/data/mock-categories"
+import { useQuery } from "@tanstack/react-query"
+import { categoriesQueryOptions } from "@/features/categories/api/category-query-options"
 
 export default function CategoryCarousel() {
+  const hydrated = useHydrated()
+  const categories = useQuery(categoriesQueryOptions())
   const containerRef = useRef<HTMLDivElement>(null)
 
   function scroll(direction: "left" | "right") {
@@ -26,13 +32,29 @@ export default function CategoryCarousel() {
     })
   }
 
+  if (hydrated && categories.isError) return null
+  if (!hydrated || categories.isPending)
+    return (
+      <LoadingRegion
+        label="Loading categories"
+        className="site-container py-12"
+      >
+        <Skeleton className="mb-7 h-8 w-56" />
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className={i === 2 ? "hidden md:block" : ""}>
+              <Skeleton className="aspect-[1.5/1] rounded-2xl" />
+              <Skeleton className="mt-4 h-4 w-2/3" />
+            </div>
+          ))}
+        </div>
+      </LoadingRegion>
+    )
   return (
     <section className="overflow-hidden bg-white py-14 sm:py-16 lg:py-20">
       <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
         <div className="mb-8 flex items-center justify-between gap-6 lg:mb-10">
-          <h2 className="leaing-[110%] font-inter text-2xl font-semibold tracking-normal text-[#252B37] sm:text-[32px]">
-            Top Categories
-          </h2>
+          <h2 className="section-heading">Shop by category</h2>
 
           <div className="flex shrink-0 items-center gap-3">
             <button
@@ -60,35 +82,43 @@ export default function CategoryCarousel() {
         ref={containerRef}
         className="scrollbar:none flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-[calc((100vw-min(100vw,80rem))/2+1rem)] pb-2 sm:px-[calc((100vw-min(100vw,80rem))/2+1.5rem)] lg:px-[calc((100vw-min(100vw,80rem))/2+2rem)] [&::-webkit-scrollbar]:hidden"
       >
-        {mockCategories.map((category) => (
+        {(categories.data ?? []).map((category) => (
           <Link
             key={category.id}
             href={`/categories/${category.slug}`}
             data-category-card
-            className="group relative min-w-[82vw] snap-start overflow-hidden rounded-l-xl rounded-r-xl bg-[#f3f4f6] sm:min-w-[58vw] md:min-w-106"
+            className="group relative min-w-[75vw] snap-start overflow-hidden rounded-2xl border border-[#e1e8d9] bg-white sm:min-w-[58vw] md:min-w-80"
           >
-            <div className="relative aspect-[1.24/1] overflow-hidden bg-white">
-              <Image
-                src={category.image}
-                alt={category.name}
-                fill
-                sizes="
+            <div className="relative aspect-[1.5/1] overflow-hidden bg-[#f4f7ef]">
+              {category.image === "/images/product-placeholder.svg" ? (
+                <div className="grid h-full place-items-center">
+                  <Layers3 className="size-14 text-[#aec49a]" strokeWidth={1} />
+                </div>
+              ) : (
+                <Image
+                  src={category.image}
+                  alt={category.name}
+                  fill
+                  sizes="
                   (max-width: 640px) 82vw,
                   (max-width: 768px) 58vw,
                   (max-width: 1024px) 45vw,
                   380px
                 "
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
-              />
+                  className="object-contain p-7 transition-transform duration-500 group-hover:scale-105"
+                />
+              )}
             </div>
 
-            <div className="font-inter bg-[#414651] px-5 py-4 text-[#FDFDFD]">
-              <h3 className="text-[20px] leading-[110%] font-semibold tracking-normal capitalize">
+            <div className="bg-white px-5 py-5 text-[#38542f]">
+              <h3 className="text-base leading-6 font-semibold tracking-tight">
                 {category.name}
               </h3>
 
-              <p className="font-inter text-[14px] leading-[110%] font-normal text-[#FDFDFD]">
-                {category.productCount.toLocaleString()} Products
+              <p className="mt-1 text-xs leading-5 text-[#68765c]">
+                {category.countKnown === false
+                  ? "Browse products"
+                  : `${category.productCount.toLocaleString()} Products`}
               </p>
             </div>
           </Link>

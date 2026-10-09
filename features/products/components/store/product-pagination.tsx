@@ -18,17 +18,26 @@ export default function ProductPagination({
     const params = new URLSearchParams(searchParams.toString())
 
     params.set("page", String(page))
+    if (pagination.mode === "cursor") {
+      const previous = page < pagination.page
+      params.set(
+        "cursor",
+        String(previous ? pagination.previousCursor : pagination.nextCursor)
+      )
+      params.set("navigation", previous ? "previous" : "next")
+    }
     router.push(`${pathname}?${params.toString()}`)
   }
 
-  if (pagination.totalPages <= 1) {
+  if (pagination.mode !== "cursor" && pagination.totalPages <= 1) {
     return null
   }
 
   return (
     <div className="mt-10 flex items-center justify-between border-t border-black/5 pt-6">
-      <p className="text-xs text-black/45">
-        Page {pagination.page} of {pagination.totalPages}
+      <p className="text-xs text-[#5e6f63]">
+        Page {pagination.page}
+        {pagination.mode !== "cursor" ? ` of ${pagination.totalPages}` : ""}
       </p>
 
       <div className="flex gap-2">

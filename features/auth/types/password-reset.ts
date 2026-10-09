@@ -1,32 +1,31 @@
-export type RequestPasswordResetOtpInput = {
-  email: string
-}
+import type { z } from "zod"
+import type {
+  requestPasswordResetOtpSchema,
+  verifyPasswordResetOtpSchema,
+  resetPasswordSchema,
+  passwordRecoveryChallengeSchema,
+} from "../schemas/password-reset-schema"
+
+export type RequestPasswordResetOtpInput = z.infer<
+  typeof requestPasswordResetOtpSchema
+>
 
 export type RequestPasswordResetOtpResponse = {
-  message: string
-  challengeId: string
-  maskedEmail: string
-  expiresInSeconds: number
-  developmentOtp?: string
+  reference: string
+  expiresAt: number | null
+  resendAt: number
 }
 
-export type VerifyPasswordResetOtpInput = {
-  email: string
-  challengeId: string
-  otp: string
-}
+export type VerifyPasswordResetOtpInput = z.infer<
+  typeof verifyPasswordResetOtpSchema
+>
 
-export type VerifyPasswordResetOtpResponse = {
-  message: string
-  resetToken: string
-}
+export type VerifyPasswordResetOtpResponse = VerifyPasswordResetOtpInput
 
-export type ResetPasswordInput = {
-  resetToken: string
-  password: string
-  confirmPassword: string
-}
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 
-export type ResetPasswordResponse = {
-  message: string
-}
+export type ResetPasswordResponse = void
+
+export type PasswordRecoveryChallenge = z.infer<
+  typeof passwordRecoveryChallengeSchema
+>

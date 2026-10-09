@@ -13,6 +13,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
 import type { ReactNode } from "react"
 
 import AdminTablePagination from "./admin-table-pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type AdminDataTableProps<TData> = {
   columns: ColumnDef<TData, unknown>[]
@@ -25,6 +26,8 @@ type AdminDataTableProps<TData> = {
   onSortingChange?: OnChangeFn<SortingState>
   loading?: boolean
   emptyState?: ReactNode
+  toolbar?: ReactNode
+  label?: string
 }
 
 export default function AdminDataTable<TData>({
@@ -38,6 +41,8 @@ export default function AdminDataTable<TData>({
   onSortingChange,
   loading = false,
   emptyState,
+  toolbar,
+  label = "Records",
 }: AdminDataTableProps<TData>) {
   const table = useReactTable({
     data,
@@ -55,10 +60,22 @@ export default function AdminDataTable<TData>({
   })
 
   return (
-    <div className="bg-background overflow-hidden rounded-xl border">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse">
-          <thead className="bg-muted/60">
+    <div className="overflow-hidden rounded-xl border border-[#e3e8e5] bg-white shadow-[0_2px_4px_rgba(25,45,32,.02)]">
+      {toolbar}
+      <div
+        className="overflow-x-auto overscroll-x-contain"
+        role="region"
+        aria-label={`${label} table`}
+        tabIndex={0}
+      >
+        <table
+          className="w-full border-collapse"
+          style={{
+            minWidth: columns.length > 4 ? 760 : columns.length > 3 ? 640 : 480,
+          }}
+        >
+          <caption className="sr-only">{label}</caption>
+          <thead className="bg-[#f8faf9]">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -68,7 +85,17 @@ export default function AdminDataTable<TData>({
                   return (
                     <th
                       key={header.id}
-                      className="text-muted-foreground border-b px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase"
+                      scope="col"
+                      aria-sort={
+                        sortable
+                          ? sorted === "asc"
+                            ? "ascending"
+                            : sorted === "desc"
+                              ? "descending"
+                              : "none"
+                          : undefined
+                      }
+                      className="border-y border-[#e9edea] px-5 py-3.5 text-left text-xs font-medium whitespace-nowrap text-[#5e6f63]"
                     >
                       {header.isPlaceholder ? null : (
                         <button
@@ -104,15 +131,21 @@ export default function AdminDataTable<TData>({
               Array.from({ length: pagination.pageSize }).map((_, index) => (
                 <tr key={index}>
                   <td colSpan={columns.length} className="border-b px-4 py-4">
-                    <div className="bg-muted h-5 animate-pulse rounded" />
+                    <Skeleton className="h-5" />
                   </td>
                 </tr>
               ))
             ) : table.getRowModel().rows.length > 0 ? (
               table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-muted/30 transition">
+                <tr
+                  key={row.id}
+                  className="transition-colors hover:bg-[#fafcf9]"
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="border-b px-4 py-3 text-sm">
+                    <td
+                      key={cell.id}
+                      className="border-b border-[#eff2ef] px-5 py-4 text-[13px] text-[#5d6a61] first:font-medium first:text-[#293c30]"
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -135,24 +168,26 @@ export default function AdminDataTable<TData>({
         </table>
       </div>
 
-      <AdminTablePagination
-        page={pagination.pageIndex}
-        pageSize={pagination.pageSize}
-        pageCount={pageCount}
-        total={total}
-        onPageChange={(pageIndex) => {
-          onPaginationChange((current) => ({
-            ...current,
-            pageIndex,
-          }))
-        }}
-        onPageSizeChange={(pageSize) => {
-          onPaginationChange({
-            pageIndex: 0,
-            pageSize,
-          })
-        }}
-      />
+      {total > 0 && (
+        <AdminTablePagination
+          page={pagination.pageIndex}
+          pageSize={pagination.pageSize}
+          pageCount={pageCount}
+          total={total}
+          onPageChange={(pageIndex) => {
+            onPaginationChange((current) => ({
+              ...current,
+              pageIndex,
+            }))
+          }}
+          onPageSizeChange={(pageSize) => {
+            onPaginationChange({
+              pageIndex: 0,
+              pageSize,
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

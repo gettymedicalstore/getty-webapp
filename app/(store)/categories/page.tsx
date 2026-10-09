@@ -1,4 +1,6 @@
+import { serverCategories } from "@/features/products/server/catalog-service"
 import type { Metadata } from "next"
+import { connection } from "next/server"
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 
 import CategoriesPageContent from "@/features/categories/components/store/categories-page-content"
@@ -12,9 +14,14 @@ export const metadata: Metadata = {
 }
 
 export default async function CategoriesPage() {
+  // Axios does not trigger Next.js's fetch(cache: "no-store") rendering policy.
+  await connection()
   const queryClient = getQueryClient()
 
-  await queryClient.prefetchQuery(categoriesQueryOptions())
+  await queryClient.prefetchQuery({
+    ...categoriesQueryOptions(),
+    queryFn: serverCategories,
+  })
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>

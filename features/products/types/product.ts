@@ -12,6 +12,7 @@ export type ProductCategory = {
 export type Product = {
   id: string
   name: string
+  brand?: string
   slug: string
   description: string
   price: number
@@ -20,6 +21,18 @@ export type Product = {
   images?: string[]
   category: ProductCategory
   stock: number
+  source?: "remote"
+  inStock?: boolean
+  stockKnown?: boolean
+  currency?: string
+  variantId?: string
+  sku?: string
+  saleUnit?: string
+  unitsPerPack?: number
+  minimumOrderQuantity?: number
+  variants?: import("@/lib/api/getty-contract").CatalogVariant[]
+  specifications?: import("@/lib/api/getty-contract").CatalogProductDetail["specifications"]
+  detail?: import("@/lib/api/getty-contract").CatalogProductDetail["detail"]
   soldCount?: number
   views?: number
   rating?: number
@@ -32,6 +45,8 @@ export type Product = {
 
 export type ProductAvailability = "in-stock" | "out-of-stock"
 export type ProductFilters = {
+  cursor?: number
+  navigation?: "next" | "previous"
   page?: number
 
   limit?: number
@@ -62,6 +77,9 @@ export type ProductPagination = {
   limit: number
   total: number
   totalPages: number
+  mode?: "cursor"
+  nextCursor?: number
+  previousCursor?: number
   hasNextPage: boolean
   hasPreviousPage: boolean
 }

@@ -1,6 +1,9 @@
 import { IconProps } from "../svgs"
 
-export default function AppLogo({ className }: IconProps) {
+export default function AppLogo({
+  className,
+  tone = "default",
+}: IconProps & { tone?: "default" | "inverse" }) {
   return (
     <svg
       width="273"
@@ -275,13 +278,13 @@ export default function AppLogo({ className }: IconProps) {
       <text
         x="41"
         y="28.7"
-        fill="#252B37"
+        fill={tone === "inverse" ? "#F4FAF6" : "#252B37"}
         fontFamily="Inter, Arial, Helvetica, sans-serif"
-        fontSize="26"
+        fontSize="20"
         fontWeight="500"
         letterSpacing="0"
       >
-        GettyMedicalStores
+        Getty Medical Stores
       </text>
     </svg>
   )

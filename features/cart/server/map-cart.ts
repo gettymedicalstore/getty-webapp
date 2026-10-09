@@ -1,0 +1,45 @@
+import type { Cart as BackendCart } from "@/lib/api/getty-contract"
+import type { Cart } from "../types/cart"
+export function mapBackendCart(cart: BackendCart): Cart {
+  return {
+    mode: "remote",
+    authenticated: true,
+    expired: cart.expired,
+    currency: cart.currency,
+    subtotal: cart.subtotal,
+    total: cart.subtotal,
+    itemCount: cart.items.reduce((count, i) => count + i.quantity, 0),
+    deliveryFee: 0,
+    discount: 0,
+    items: cart.items.map((i) => ({
+      productId: i.product,
+      variantId: i.variant,
+      quantity: i.quantity,
+      minimum: i.minimum,
+      purchasable: i.purchasable,
+      priceAvailable: i.price !== null,
+      lineSubtotal: i.subtotal,
+      product: {
+        id: i.product,
+        name: i.name,
+        slug: i.product,
+        description: `${i.unit}, ${i.pack} per pack`,
+        price: i.price ?? 0,
+        sku: i.sku,
+        variantId: i.variant,
+        saleUnit: i.unit,
+        unitsPerPack: i.pack,
+        minimumOrderQuantity: i.minimum,
+        stock: i.available,
+        inStock: i.purchasable,
+        stockKnown: true,
+        currency: i.currency,
+        source: "remote",
+        image: "/images/product-placeholder.svg",
+        category: { id: "", name: "Medical supplies", slug: "" },
+        active: i.purchasable,
+        createdAt: "",
+      },
+    })),
+  }
+}

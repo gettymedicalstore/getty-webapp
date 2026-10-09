@@ -1,13 +1,20 @@
 "use client"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { numericField } from "@/lib/form-schemas"
+import { FieldError } from "@/components/shared/form/validated-form"
 
 import { Minus, Plus, Trash2 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
+import { useId, useState } from "react"
 
 import { useCart } from "../../hooks/use-cart"
 import type { CartItem } from "../../types/cart"
 import RemoveCartItemDialog from "./remove-cart-item-dialog"
+import { formatCurrency } from "@/features/products/utils/format-currency"
+import { productMaximum } from "@/features/products/utils/availability"
 
 export default function CartItems({ items }: { items: CartItem[] }) {
   const cart = useCart()
@@ -19,28 +26,29 @@ export default function CartItems({ items }: { items: CartItem[] }) {
         {items.map((item) => {
           const quantity = getValidQuantity(item.quantity)
 
-          const maximum = Math.max(getValidStock(item.product.stock), 1)
+          const maximum = Math.max(productMaximum(item.product), 1)
 
-          const lineTotal = item.product.price * quantity
+          const minimum = item.minimum ?? 1
+          const lineTotal = item.lineSubtotal ?? item.product.price * quantity
 
           function decreaseQuantity() {
-            if (quantity <= 1) return
+            if (quantity <= minimum) return
 
-            cart.updateQuantity(item.productId, quantity - 1)
+            cart.updateQuantity(item.variantId ?? item.productId, quantity - 1)
           }
 
           function increaseQuantity() {
             if (quantity >= maximum) return
 
-            cart.updateQuantity(item.productId, quantity + 1)
+            cart.updateQuantity(item.variantId ?? item.productId, quantity + 1)
           }
 
           return (
             <article
-              key={item.productId}
-              className="rounded-lg border border-[#E9EAEB] bg-white p-4"
+              key={item.variantId ?? item.productId}
+              className="rounded-2xl border border-[#E9EAEB] bg-white p-4"
             >
-              <div className="grid gap-4 md:grid-cols-[96px_minmax(0,1fr)_170px] md:items-start">
+              <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-4 sm:grid-cols-[96px_minmax(0,1fr)]">
                 <Link
                   href={`/products/${item.product.slug}`}
                   aria-label={`View ${item.product.name}`}
@@ -49,6 +57,7 @@ export default function CartItems({ items }: { items: CartItem[] }) {
                   <Image
                     src={item.product.image}
                     alt={item.product.name}
+                    unoptimized={item.product.source === "remote"}
                     fill
                     sizes="96px"
                     className="object-contain p-2"
@@ -56,46 +65,53 @@ export default function CartItems({ items }: { items: CartItem[] }) {
                 </Link>
 
                 <div className="min-w-0">
-                  <p className="text-sm leading-5 font-semibold text-[#252B37]">
-                    SKU-
-                    {formatSku(item.product.id)}
-                  </p>
-
                   <Link
                     href={`/products/${item.product.slug}`}
-                    className="hover:text-primary mt-1 block text-sm leading-5 text-[#414651] transition-colors"
+                    className="hover:text-primary block text-sm leading-5 font-semibold [overflow-wrap:anywhere] text-[#2e4431]"
                   >
                     {item.product.name}
                   </Link>
-
-                  <p className="mt-2 line-clamp-3 text-xs leading-[18px] text-[#535862]">
-                    {item.product.description}
+                  <p className="mt-2 text-xs leading-5 [overflow-wrap:anywhere] text-[#5e6f63]">
+                    SKU: {item.product.sku ?? formatSku(item.product.id)}
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-4 md:items-end">
-                  <p className="flex items-baseline font-semibold text-[#252B37]">
-                    <span className="mr-1 text-xs leading-[18px]">NGN</span>
-
-                    <span className="text-2xl leading-8">
-                      {formatPrice(lineTotal)}
-                    </span>
+                <div className="col-span-2 flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-xl font-semibold [overflow-wrap:anywhere] text-[#173d2b]">
+                    {item.priceAvailable === false
+                      ? "Unavailable"
+                      : formatCurrency(lineTotal)}
                   </p>
 
                   <QuantitySelector
                     productName={item.product.name}
                     quantity={quantity}
                     maximum={maximum}
+                    onSetQuantity={(value) => {
+                      void cart.updateQuantity(
+                        item.variantId ?? item.productId,
+                        value
+                      )
+                    }}
+                    minimum={minimum}
+                    disabled={cart.isUpdating}
                     onDecrease={decreaseQuantity}
                     onIncrease={increaseQuantity}
                   />
                 </div>
               </div>
 
+              {item.purchasable === false && (
+                <p role="status" className="mt-3 text-sm text-red-700">
+                  This option is unavailable. Check its quantity, remove it or
+                  choose another option on the product page.
+                </p>
+              )}
               <button
+                disabled={cart.isUpdating}
                 type="button"
                 onClick={() => setPendingRemoval(item)}
-                className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-medium text-[#B42318] transition-colors hover:text-[#912018]"
+                className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-[#B42318] transition-colors hover:text-[#912018]"
               >
                 <Trash2 aria-hidden className="size-4" strokeWidth={1.8} />
                 Remove Item
@@ -113,12 +129,11 @@ export default function CartItems({ items }: { items: CartItem[] }) {
             setPendingRemoval(null)
           }
         }}
-        onConfirm={() => {
-          if (!pendingRemoval) return
-
-          cart.removeProduct(pendingRemoval.productId)
-
-          setPendingRemoval(null)
+        onConfirm={async () => {
+          if (!pendingRemoval) return false
+          return cart.removeProduct(
+            pendingRemoval.variantId ?? pendingRemoval.productId
+          )
         }}
       />
     </>
@@ -129,43 +144,86 @@ function QuantitySelector({
   productName,
   quantity,
   maximum,
+  minimum,
+  disabled,
   onDecrease,
   onIncrease,
+  onSetQuantity,
 }: {
   productName: string
   quantity: number
   maximum: number
+  minimum: number
+  disabled: boolean
   onDecrease: () => void
   onIncrease: () => void
+  onSetQuantity: (value: number) => void
 }) {
+  const schema = z.object({
+    quantity: numericField("Quantity", minimum, maximum, true),
+  })
+  const form = useForm<
+    z.input<typeof schema>,
+    unknown,
+    z.output<typeof schema>
+  >({
+    resolver: zodResolver(schema),
+    values: { quantity: String(quantity) },
+    shouldUseNativeValidation: false,
+  })
+  const errorId = `${useId()}-error`
+  const quantityField = form.register("quantity")
+  function submit(values: z.output<typeof schema>) {
+    if (!disabled && values.quantity !== quantity)
+      onSetQuantity(values.quantity)
+  }
   return (
-    <div className="flex h-12 w-[164px] items-center justify-between rounded-[3px] border border-[#E9EAEB] bg-white px-5">
-      <button
-        type="button"
-        onClick={onDecrease}
-        disabled={quantity <= 1}
-        aria-label={`Decrease quantity of ${productName}`}
-        className="grid cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
+    <div className="max-w-64">
+      <form
+        noValidate
+        onSubmit={form.handleSubmit(submit)}
+        className="flex h-12 w-[164px] items-center justify-between rounded-xl border border-[#c9dfcc] bg-[#eff7f0] px-1"
       >
-        <Minus aria-hidden className="size-4" strokeWidth={2} />
-      </button>
+        <button
+          type="button"
+          onClick={onDecrease}
+          disabled={disabled || quantity <= minimum}
+          aria-label={`Decrease quantity of ${productName}`}
+          className="grid size-11 shrink-0 cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Minus aria-hidden className="size-4" strokeWidth={2} />
+        </button>
 
-      <span
-        aria-live="polite"
-        className="text-center text-base leading-6 font-medium text-[#414651]"
-      >
-        {String(quantity).padStart(2, "0")}
-      </span>
+        <input
+          {...quantityField}
+          aria-label={`Quantity of ${productName}`}
+          aria-invalid={Boolean(form.formState.errors.quantity)}
+          aria-describedby={
+            form.formState.errors.quantity ? errorId : undefined
+          }
+          className="w-14 appearance-none text-center text-base font-medium outline-none"
+          type="number"
+          disabled={disabled}
+          onBlur={(event) => {
+            void quantityField.onBlur(event)
+            void form.handleSubmit(submit)()
+          }}
+        />
 
-      <button
-        type="button"
-        onClick={onIncrease}
-        disabled={quantity >= maximum}
-        aria-label={`Increase quantity of ${productName}`}
-        className="grid cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
-      >
-        <Plus aria-hidden className="size-4" strokeWidth={2} />
-      </button>
+        <button
+          type="button"
+          onClick={onIncrease}
+          disabled={disabled || quantity >= maximum}
+          aria-label={`Increase quantity of ${productName}`}
+          className="grid size-11 shrink-0 cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Plus aria-hidden className="size-4" strokeWidth={2} />
+        </button>
+      </form>
+      <FieldError
+        id={errorId}
+        message={form.formState.errors.quantity?.message}
+      />
     </div>
   )
 }
@@ -176,18 +234,6 @@ function getValidQuantity(value: number | undefined) {
   return Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1
 }
 
-function getValidStock(value: number | undefined) {
-  const stock = Number(value)
-
-  return Number.isFinite(stock) && stock > 0 ? Math.floor(stock) : 0
-}
-
 function formatSku(id: string) {
   return id.replace(/^prod-/i, "").toUpperCase()
-}
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("en-NG", {
-    maximumFractionDigits: 0,
-  }).format(value)
 }

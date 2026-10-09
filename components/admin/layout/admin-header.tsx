@@ -1,12 +1,19 @@
 "use client"
+import {
+  ValidatedForm,
+  FormInput,
+} from "@/components/shared/form/validated-form"
+import { searchSchema } from "@/lib/form-schemas"
+import { useRouter } from "next/navigation"
 
-import { Bell, Menu, Search } from "lucide-react"
+import { Menu, Search } from "lucide-react"
 import { useState } from "react"
 
 import AdminMobileSidebar from "./admin-mobile-sidebar"
 import AdminUserMenu from "./admin-user-menu"
 
 export default function AdminHeader() {
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
@@ -21,26 +28,25 @@ export default function AdminHeader() {
           <Menu className="size-5" />
         </button>
 
-        <div className="relative hidden max-w-md flex-1 md:block">
+        <ValidatedForm
+          schema={searchSchema}
+          onSubmit={({ search }) =>
+            router.push(`/products?${new URLSearchParams({ search })}`)
+          }
+          className="relative hidden max-w-md flex-1 md:block"
+        >
           <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
 
-          <input
+          <FormInput
             type="search"
-            placeholder="Search admin..."
+            name="search"
+            aria-label="Search products"
+            placeholder="Search products..."
             className="bg-background focus:border-primary h-10 w-full rounded-md border pr-3 pl-9 text-sm outline-none"
           />
-        </div>
+        </ValidatedForm>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            className="relative grid size-10 place-items-center rounded-md border"
-            aria-label="Notifications"
-          >
-            <Bell className="size-5" />
-            <span className="bg-destructive absolute top-1.5 right-1.5 size-2 rounded-full" />
-          </button>
-
           <AdminUserMenu />
         </div>
       </header>

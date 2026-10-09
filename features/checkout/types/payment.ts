@@ -17,6 +17,7 @@ export type CheckoutItemInput = {
 
 export type CheckoutPaymentRequest = {
   email: string
+  delivery?: import("../schemas/checkout-schema").CheckoutFormSchema
   items: CheckoutItemInput[]
   paymentMode: CheckoutPaymentMode
 }

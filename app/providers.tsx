@@ -1,6 +1,5 @@
 "use client"
 
-import AuthDialogProvider from "@/features/auth/components/auth-dialog-provider"
 import {
   environmentManager,
   QueryClient,
@@ -8,6 +7,9 @@ import {
 } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 import { Toaster } from "sonner"
+import SessionCacheSync from "@/features/auth/components/session-cache-sync"
+import SessionNotice from "@/features/auth/components/session-notice"
+import { GettyApiError } from "@/lib/api/errors"
 
 function createQueryClient() {
   return new QueryClient({
@@ -15,7 +17,15 @@ function createQueryClient() {
       queries: {
         staleTime: 60 * 1000,
         refetchOnWindowFocus: false,
-        retry: 1,
+        retry: (failureCount, error) => {
+          if (
+            error instanceof GettyApiError &&
+            error.status >= 400 &&
+            error.status < 500
+          )
+            return false
+          return failureCount < 1
+        },
       },
       mutations: {
         retry: 0,
@@ -41,7 +51,9 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthDialogProvider>{children}</AuthDialogProvider>
+      <SessionCacheSync />
+      <SessionNotice />
+      {children}
 
       <Toaster position="top-right" richColors closeButton />
     </QueryClientProvider>

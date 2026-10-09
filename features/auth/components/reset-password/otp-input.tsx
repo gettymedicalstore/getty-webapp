@@ -1,112 +1,95 @@
 "use client"
 
-import { useRef, type ClipboardEvent, type KeyboardEvent } from "react"
-
-import { cn } from "@/lib/utils"
-
-type OtpInputProps = {
-  value: string
-  onChange: (value: string) => void
-  length?: number
-  disabled?: boolean
-  error?: boolean
-}
+import { useId, type Ref } from "react"
+import { useController } from "react-hook-form"
+import { FieldError } from "@/components/shared/form/validated-form"
+import { REGEXP_ONLY_DIGITS } from "input-otp"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp"
 
 export default function OtpInput({
   value,
   onChange,
-  length = 4,
+  length = 6,
+  minLength = length,
   disabled = false,
   error = false,
-}: OtpInputProps) {
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([])
-
-  const digits = Array.from(
-    {
-      length,
-    },
-    (_, index) => value[index] ?? ""
-  )
-
-  function updateDigit(index: number, rawValue: string) {
-    const digit = rawValue.replace(/\D/g, "").slice(-1)
-
-    const nextDigits = [...digits]
-    nextDigits[index] = digit
-
-    onChange(nextDigits.join(""))
-
-    if (digit && index < length - 1) {
-      inputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  function handleKeyDown(
-    event: KeyboardEvent<HTMLInputElement>,
-    index: number
-  ) {
-    if (event.key === "Backspace" && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-
-    if (event.key === "ArrowLeft" && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-
-    if (event.key === "ArrowRight" && index < length - 1) {
-      inputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  function handlePaste(event: ClipboardEvent<HTMLInputElement>) {
-    event.preventDefault()
-
-    const pastedDigits = event.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, length)
-
-    if (!pastedDigits) {
-      return
-    }
-
-    onChange(pastedDigits)
-
-    const targetIndex = Math.min(pastedDigits.length, length) - 1
-
-    inputRefs.current[Math.max(0, targetIndex)]?.focus()
-  }
+  inputRef,
+  onBlur,
+  errorId,
+}: {
+  value: string
+  onChange: (value: string) => void
+  length?: number
+  minLength?: number
+  disabled?: boolean
+  error?: boolean
+  inputRef?: Ref<HTMLInputElement>
+  onBlur?: () => void
+  errorId?: string
+}) {
+  const id = useId()
 
   return (
-    <div className="flex justify-center gap-3">
-      {digits.map((digit, index) => (
-        <input
-          key={index}
-          ref={(element) => {
-            inputRefs.current[index] = element
-          }}
-          type="text"
-          inputMode="numeric"
-          autoComplete={index === 0 ? "one-time-code" : "off"}
-          maxLength={1}
-          value={digit}
-          disabled={disabled}
-          aria-label={`Verification digit ${index + 1}`}
-          onChange={(event) => updateDigit(index, event.target.value)}
-          onKeyDown={(event) => handleKeyDown(event, index)}
-          onPaste={handlePaste}
-          className={cn(
-            "size-14 rounded-lg border bg-white text-center text-3xl font-semibold transition outline-none sm:size-16",
-            "focus:border-[#12B76A] focus:ring-4 focus:ring-[#12B76A]/10",
-            error
-              ? "border-red-400 text-red-600"
-              : digit
-                ? "border-[#12B76A] text-[#058A51]"
-                : "border-[#D5D7DA] text-[#181D27]",
-            disabled && "cursor-not-allowed opacity-50"
-          )}
-        />
-      ))}
+    <div className="space-y-2">
+      <label htmlFor={id} className="block text-sm font-medium text-[#414651]">
+        Verification code
+        <span aria-hidden="true" className="text-destructive ml-1">
+          *
+        </span>
+      </label>
+      <InputOTP
+        id={id}
+        ref={inputRef}
+        name="otp"
+        value={value}
+        onChange={onChange}
+        maxLength={length}
+        pattern={REGEXP_ONLY_DIGITS}
+        pasteTransformer={(pasted) => pasted.replace(/\D/g, "")}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        aria-required
+        disabled={disabled}
+        aria-invalid={error}
+        aria-describedby={errorId}
+        onBlur={onBlur}
+        aria-label={`Verification code, ${minLength === length ? length : `${minLength} to ${length}`} digits`}
+        containerClassName="w-full"
+      >
+        <InputOTPGroup className="w-full">
+          {Array.from({ length }, (_, index) => (
+            <InputOTPSlot
+              key={index}
+              index={index}
+              aria-invalid={error}
+              className={index >= minLength ? "bg-[#f8faf8]" : undefined}
+            />
+          ))}
+        </InputOTPGroup>
+      </InputOTP>
+    </div>
+  )
+}
+
+export function FormOtpInput({ disabled = false }: { disabled?: boolean }) {
+  const { field, fieldState } = useController({ name: "otp", defaultValue: "" })
+  const errorId = `${useId()}-error`
+  return (
+    <div>
+      <OtpInput
+        inputRef={field.ref}
+        onBlur={field.onBlur}
+        errorId={fieldState.error ? errorId : undefined}
+        value={field.value}
+        onChange={field.onChange}
+        disabled={disabled}
+        error={Boolean(fieldState.error)}
+      />
+      <FieldError id={errorId} message={fieldState.error?.message} />
     </div>
   )
 }

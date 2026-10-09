@@ -1,81 +1,145 @@
 "use client"
+import {
+  ValidatedForm,
+  FormInput,
+} from "@/components/shared/form/validated-form"
+import { trackingSchema } from "@/lib/form-schemas"
 
 import { useMutation } from "@tanstack/react-query"
-import { Check, PackageSearch } from "lucide-react"
-import { FormEvent, useState } from "react"
+import {
+  ArrowRight,
+  Check,
+  CircleHelp,
+  LoaderCircle,
+  PackageSearch,
+} from "lucide-react"
+import Link from "next/link"
 
-import { trackOrder } from "../../api/track-order"
+import { trackOrder, type TrackOrderInput } from "../../api/track-order"
 
 export default function TrackOrderPageContent({
   initialOrderNumber,
 }: {
   initialOrderNumber?: string
 }) {
-  const [orderNumber, setOrderNumber] = useState(initialOrderNumber ?? "")
-  const [email, setEmail] = useState("")
-
   const trackingMutation = useMutation({
     mutationFn: trackOrder,
   })
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    trackingMutation.mutate({
-      orderNumber: orderNumber.trim(),
-      email: email.trim(),
-    })
+  function submit(values: TrackOrderInput) {
+    trackingMutation.mutate(values)
   }
 
   return (
-    <section className="bg-[#f7f7f7] py-12 sm:py-16">
+    <section className="bg-[#f7f9f5] py-10 sm:py-14 lg:py-18">
       <div className="site-container">
-        <div className="mx-auto max-w-2xl text-center">
-          <div className="bg-primary/10 text-primary mx-auto grid size-16 place-items-center rounded-full">
-            <PackageSearch className="size-7" />
+        <div className="mx-auto max-w-5xl overflow-hidden rounded-3xl border border-[#dfe9df] bg-white shadow-[0_20px_60px_-48px_rgba(18,63,48,0.45)]">
+          <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="bg-[#eef6ef] px-6 py-9 sm:px-10 sm:py-12 lg:px-12 lg:py-16">
+              <span className="text-primary inline-flex size-14 items-center justify-center rounded-2xl border border-[#d2e7d5] bg-white">
+                <PackageSearch
+                  className="size-7"
+                  strokeWidth={1.7}
+                  aria-hidden
+                />
+              </span>
+              <p className="mt-10 text-xs font-semibold tracking-[0.14em] text-[#4f7559] uppercase">
+                Order updates
+              </p>
+              <h1 className="mt-3 max-w-sm text-3xl font-semibold tracking-tight text-[#1e372a] sm:text-4xl">
+                Track your order
+              </h1>
+              <p className="mt-4 max-w-md text-sm leading-7 text-[#536b5a] sm:text-base">
+                Enter your order number to find the latest update.
+              </p>
+              <div className="mt-10 border-t border-[#d4e4d7] pt-6">
+                <p className="flex items-start gap-3 text-sm leading-6 text-[#496350]">
+                  <CircleHelp className="mt-0.5 size-5 shrink-0" aria-hidden />
+                  Need help with an order? Our support team can help you find
+                  it.
+                </p>
+                <Link
+                  href="/contact"
+                  className="text-primary mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold hover:underline"
+                >
+                  Contact support <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              </div>
+            </div>
+            <div className="flex flex-col justify-center px-6 py-9 sm:px-10 sm:py-12 lg:px-12">
+              <h2 className="text-xl font-semibold tracking-tight text-[#233b2d]">
+                Find an order
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[#64766a]">
+                You’ll find the order number in your confirmation email.
+              </p>
+              <ValidatedForm
+                schema={trackingSchema}
+                onSubmit={submit}
+                className="mt-8 space-y-5"
+              >
+                <div>
+                  <label
+                    htmlFor="tracking-order-number"
+                    className="text-sm font-medium text-[#304a38]"
+                  >
+                    Order number
+                  </label>
+                  <FormInput
+                    id="tracking-order-number"
+                    required
+                    name="orderNumber"
+                    defaultValue={initialOrderNumber ?? ""}
+                    onChange={() => {
+                      trackingMutation.reset()
+                    }}
+                    autoComplete="off"
+                    placeholder="e.g. GET-123456"
+                    className="form-input mt-2 h-12 w-full rounded-xl"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={trackingMutation.isPending}
+                  className="bg-primary hover:bg-primary-darker inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white transition disabled:opacity-50"
+                >
+                  {trackingMutation.isPending ? (
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <PackageSearch className="size-4" aria-hidden />
+                  )}
+                  {trackingMutation.isPending
+                    ? "Checking order…"
+                    : "Track order"}
+                </button>
+              </ValidatedForm>
+              {trackingMutation.isError && (
+                <div
+                  role="alert"
+                  className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"
+                >
+                  {trackingMutation.error.message}{" "}
+                  <Link
+                    href="/contact"
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Contact support
+                  </Link>
+                </div>
+              )}
+              {trackingMutation.isSuccess && !trackingMutation.data && (
+                <div
+                  role="status"
+                  className="mt-6 rounded-xl border border-[#dce6de] bg-[#f6f9f6] p-4 text-sm text-[#3e5846]"
+                >
+                  No matching order was found. Check the details and try again.
+                </div>
+              )}
+            </div>
           </div>
-
-          <h1 className="mt-5 text-3xl font-extrabold">Track your order</h1>
         </div>
-
-        <form
-          onSubmit={submit}
-          className="mx-auto mt-8 grid max-w-2xl gap-4 rounded-xl bg-white p-6 sm:grid-cols-2"
-        >
-          <input
-            required
-            value={orderNumber}
-            onChange={(event) => setOrderNumber(event.target.value)}
-            placeholder="Order number"
-            className="form-input"
-          />
-
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="Email address"
-            className="form-input"
-          />
-
-          <button
-            type="submit"
-            disabled={trackingMutation.isPending}
-            className="bg-primary h-12 rounded-md text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
-          >
-            {trackingMutation.isPending ? "Checking order..." : "Track order"}
-          </button>
-        </form>
-
-        {trackingMutation.isSuccess && !trackingMutation.data && (
-          <div className="border-destructive/20 bg-destructive/5 text-destructive mx-auto mt-6 max-w-2xl rounded-xl border p-5 text-sm">
-            No matching order was found.
-          </div>
-        )}
-
         {trackingMutation.data && (
-          <div className="mx-auto mt-8 max-w-2xl rounded-xl bg-white p-6 sm:p-8">
+          <div className="mx-auto mt-6 max-w-5xl rounded-2xl border border-[#dfe9df] bg-white p-6 sm:p-8">
             <div className="flex justify-between border-b border-black/5 pb-5">
               <strong>{trackingMutation.data.orderNumber}</strong>
               <span className="bg-primary/10 text-primary rounded-full px-3 py-1.5 text-xs font-bold capitalize">

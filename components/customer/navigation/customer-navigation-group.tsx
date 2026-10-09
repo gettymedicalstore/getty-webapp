@@ -21,7 +21,7 @@ export default function CustomerNavigationGroup({
 }: CustomerNavigationGroupProps) {
   return (
     <div>
-      <p className="text-muted-foreground mb-2 px-3 text-[10px] font-bold tracking-[0.16em] uppercase">
+      <p className="mb-2 px-3 text-[10px] font-medium tracking-[0.13em] text-[#64715b] uppercase">
         {label}
       </p>
 

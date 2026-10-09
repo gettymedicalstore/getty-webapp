@@ -11,6 +11,7 @@ import {
 
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { withoutNativeConstraints } from "./without-native-constraints"
 
 type InputFieldProps = Omit<ComponentPropsWithoutRef<typeof Input>, "id"> & {
   id?: string
@@ -75,7 +76,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
       .join(" ")
 
     return (
-      <div className={cn("w-full space-y-1.5", containerClassName)}>
+      <div className={cn("w-full space-y-2", containerClassName)}>
         {label && (
           <label
             htmlFor={inputId}
@@ -85,12 +86,17 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
             )}
           >
             {label}
+            {required && requiredIndicator && (
+              <span aria-hidden="true" className="text-destructive ml-1">
+                *
+              </span>
+            )}
           </label>
         )}
 
         <div className="relative">
           {leftElement && (
-            <div className="pointer-events-none absolute top-1/2 left-3 flex -translate-y-1/2 items-center text-[#717680]">
+            <div className="pointer-events-none absolute top-1/2 left-3 flex -translate-y-1/2 items-center text-[#5e6f63]">
               {leftElement}
             </div>
           )}
@@ -99,19 +105,19 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
             ref={ref}
             id={inputId}
             type={resolvedType}
-            required={required}
+            aria-required={required || undefined}
             disabled={disabled}
             aria-invalid={Boolean(error)}
             aria-describedby={describedBy || undefined}
             className={cn(
-              "h-10 rounded-md border-[#D5D7DA] px-3 text-sm shadow-[0_1px_2px_rgba(10,13,18,0.05)]",
+              "focus-visible:border-primary focus-visible:ring-primary/10 h-13 rounded-lg border-[#dce2de] bg-white px-3.5 text-base shadow-none transition-[border-color,box-shadow] placeholder:text-[#8b938e] hover:border-[#bac7be] focus-visible:ring-3 sm:text-sm",
               leftElement && "pl-10",
               (rightElement || canTogglePassword) && "pr-11",
               error &&
                 "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/20",
               inputClassName
             )}
-            {...props}
+            {...withoutNativeConstraints(props)}
           />
 
           {canTogglePassword && isPasswordField ? (
@@ -121,7 +127,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
               disabled={disabled}
               aria-label={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
-              className="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-[#535862] transition hover:bg-[#F5F5F5] disabled:pointer-events-none disabled:opacity-50"
+              className="absolute top-1/2 right-0.5 grid size-11 -translate-y-1/2 place-items-center rounded-lg text-[#535862] transition hover:bg-[#F5F5F5] disabled:pointer-events-none disabled:opacity-50"
             >
               {showPassword ? (
                 <EyeOff aria-hidden className="size-4" />
@@ -141,7 +147,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
         {hint && !error && (
           <p
             id={hintId}
-            className={cn("text-xs leading-5 text-[#717680]", hintClassName)}
+            className={cn("text-xs leading-5 text-[#5e6f63]", hintClassName)}
           >
             {hint}
           </p>

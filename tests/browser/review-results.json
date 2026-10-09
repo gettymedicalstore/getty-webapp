@@ -1,0 +1,66 @@
+{
+  "reviewDate": "2026-10-09",
+  "browser": "Google Chrome (Playwright)",
+  "widths": [320, 375, 390, 414, 768, 1024, 1280, 1440, 1920],
+  "routeCases": 52,
+  "routeViewportChecks": 468,
+  "pageOverflows": 0,
+  "runtimeErrors": 0,
+  "axeViolations": 0,
+  "accessibilityWidths": [320, 1440],
+  "interactionScenarios": [
+    {
+      "name": "guest-cart",
+      "passed": true
+    },
+    {
+      "name": "category-dialog",
+      "passed": true
+    },
+    {
+      "name": "workspace-navigation",
+      "passed": true
+    },
+    {
+      "name": "password-dialog",
+      "passed": true
+    },
+    {
+      "name": "product-photos",
+      "passed": true
+    },
+    {
+      "name": "signup-validation",
+      "passed": true
+    },
+    {
+      "name": "hero-carousel",
+      "passed": true
+    },
+    {
+      "name": "short-screen-dialog",
+      "passed": true
+    },
+    {
+      "name": "store-api-error",
+      "passed": true
+    },
+    {
+      "name": "catalog-detail",
+      "passed": true
+    }
+  ],
+  "unitTests": {
+    "passed": 150,
+    "failed": 0
+  },
+  "typecheck": "passed",
+  "productionBuild": "passed",
+  "lint": {
+    "errors": 0,
+    "warnings": 1,
+    "note": "Existing TanStack Table React Compiler compatibility warning"
+  },
+  "method": "Production route sweep plus targeted reruns after corrections. Browser API fixtures; server public catalog reads use configured API. No live mutations.",
+  "artifacts": "/private/tmp/getty-review/"
+}

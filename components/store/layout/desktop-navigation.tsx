@@ -15,7 +15,10 @@ export default function DesktopNavigation() {
   const pathname = usePathname()
 
   return (
-    <nav className="flex h-12 items-center gap-7">
+    <nav
+      aria-label="Main navigation"
+      className="flex items-center gap-1 xl:gap-2"
+    >
       {links.map((link) => {
         const isActive =
           link.href === "/"
@@ -28,8 +31,10 @@ export default function DesktopNavigation() {
             href={link.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "font-inter text-[14px] leading-4 font-semibold transition",
-              isActive ? "text-primary" : "hover:text-primary text-[#535862]"
+              "font-inter inline-flex min-h-12 items-center rounded-xl px-3 text-base font-semibold whitespace-nowrap transition",
+              isActive
+                ? "text-primary bg-[#f0f6f1]"
+                : "hover:text-primary text-[#535862] hover:bg-[#f4f8f3]"
             )}
           >
             {link.label}

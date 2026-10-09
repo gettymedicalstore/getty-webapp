@@ -1,5 +1,5 @@
-import CustomerDashboard from "@/features/customer/components/dashboard"
+import { redirect } from "next/navigation"
 
 export default function CustomerPage() {
-  return <CustomerDashboard />
+  redirect("/customer/orders")
 }

@@ -1,159 +1,158 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, ChevronRight, Search } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { type SyntheticEvent, useEffect, useState } from "react"
-
-const slides = [
-  {
-    id: "hero-1",
-    eyebrow: "Welcome to GettyMedicalStore",
-    title: "Your Trusted Medical Supply Marketplace",
-    image: "/images/14.webp",
-    imageAlt: "Medical and healthcare product",
-  },
-  {
-    id: "hero-2",
-    eyebrow: "Professional hospital supplies",
-    title: "Reliable Equipment for Better Healthcare",
-    image: "/images/10.webp",
-    imageAlt: "Professional hospital equipment",
-  },
-  {
-    id: "hero-3",
-    eyebrow: "Everyday personal wellness",
-    title: "Healthcare Essentials for Every Home",
-    image: "/images/20.webp",
-    imageAlt: "Personal healthcare and wellness product",
-  },
-]
+import { ArrowLeft, ArrowRight, Package } from "lucide-react"
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { featuredProductsQueryOptions } from "@/features/products/api/product-query-options"
+import ProductCardImage from "@/features/products/components/store/product-card-image"
+import ProductPrice from "@/features/products/components/store/product-price"
 
 export default function HeroCarousel() {
-  const router = useRouter()
-
-  const [active, setActive] = useState(0)
-  const [search, setSearch] = useState("")
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setActive((current) => (current + 1) % slides.length)
-    }, 6000)
-
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const slide = slides[active]
-
-  function previousSlide() {
-    setActive((current) => (current - 1 + slides.length) % slides.length)
-  }
-
-  function nextSlide() {
-    setActive((current) => (current + 1) % slides.length)
-  }
-
-  function submitSearch(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
-    event.preventDefault()
-
-    const query = search.trim()
-
-    if (!query) return
-
-    router.push(`/search?q=${encodeURIComponent(query)}`)
+  const query = useQuery(featuredProductsQueryOptions(8))
+  const products = query.data ?? []
+  const [selected, setSelected] = useState(0)
+  const index = products.length ? selected % products.length : 0
+  const product = products[index]
+  const move = (step: number) => {
+    if (products.length > 1)
+      setSelected(
+        (current) => (current + step + products.length) % products.length
+      )
   }
 
   return (
     <section
-      aria-roledescription="carousel"
-      aria-label="Featured medical products"
-      className="relative"
+      className="border-b border-[#e3e9e5] bg-[#f4f7f5]"
+      aria-labelledby="store-introduction"
     >
-      <div className="mx-auto w-full max-w-330 px-4 sm:px-0">
-        <div className="rounded-b-11 relative min-h-145 overflow-hidden rounded-b-[48px] bg-[#F5F5F5]">
-          <div className="mx-auto grid min-h-145 w-full max-w-330 items-center gap-10 px-6 pt-14 pb-36 sm:px-10 lg:min-h-175 lg:grid-cols-[0.9fr_1.1fr] lg:px-12 lg:pt-10 lg:pb-40 xl:px-24">
-            <div className="relative z-20 mx-auto w-full max-w-xl lg:mx-0">
-              <p className="font-geist text-sm font-normal tracking-normal text-[#252b37] sm:text-base">
-                {slide.eyebrow}
-              </p>
-
-              <h1 className="mt-5 max-w-140 text-[42px] leading-[110%] font-bold tracking-[-0.045em] text-[#252B37] capitalize sm:text-5xl lg:text-6xl">
-                {slide.title}
-              </h1>
-
-              <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Link
-                  href="/login"
-                  className="bg-primary border-primary inline-flex h-14 shrink-0 cursor-pointer items-center justify-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold text-white transition hover:text-white/80"
-                >
-                  Get Started
-                </Link>
-
-                <Link
-                  href="/products"
-                  className="hover:border-primary hover:text-primary inline-flex h-14 shrink-0 cursor-pointer items-center justify-center gap-3 rounded-xl border border-[#D5D7DA] bg-transparent px-4 py-3 text-base font-semibold text-[#535862] transition"
-                >
-                  Explore More
-                  <ChevronRight className="size-6 text-inherit" />
-                </Link>
-              </div>
-            </div>
-
-            <div className="relative mx-auto flex h-92.5 w-full max-w-150 items-center justify-center sm:h-112.5 lg:h-147.5">
-              <div className="absolute top-30 left-1/2 size-87.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#E9EAEB] sm:size-110 lg:size-142.5" />
-
-              <div className="relative z-10 h-85 w-75 sm:h-105 sm:w-95 lg:h-132.5 lg:w-117.5">
-                <Image
-                  key={slide.image}
-                  src={slide.image}
-                  alt={slide.imageAlt}
-                  fill
-                  priority={active === 0}
-                  sizes="(max-width: 640px) 300px, (max-width: 1024px) 380px, 470px"
-                  className="object-contain mix-blend-multiply"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={previousSlide}
-            aria-label="Previous slide"
-            className="text-primary absolute top-1/2 left-5 z-30 grid size-13 -translate-y-1/2 place-items-center rounded-full bg-[#FDFDFD] shadow-none transition hover:scale-105 sm:left-4"
+      <div className="site-container grid lg:min-h-[420px] lg:grid-cols-[1.05fr_1fr]">
+        <div className="flex flex-col justify-center py-10 sm:py-12 lg:pr-16">
+          <p className="text-xs font-semibold tracking-[.12em] text-[#52675b] uppercase">
+            Getty Medical Stores
+          </p>
+          <h1
+            id="store-introduction"
+            className="mt-5 max-w-xl text-[clamp(2.25rem,4vw,3.75rem)] leading-[1.08] font-semibold tracking-[-.04em] text-[#123e2c]"
           >
-            <ArrowLeft className="size-5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={nextSlide}
-            aria-label="Next slide"
-            className="text-primary absolute top-1/2 right-5 z-30 grid size-13 -translate-y-1/2 place-items-center rounded-full bg-white shadow-none transition hover:scale-105 sm:right-4"
-          >
-            <ArrowRight className="size-5" />
-          </button>
-
-          <div className="absolute bottom-24.5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 lg:bottom-28">
-            {slides.map((item, index) => {
-              const isActive = active === index
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActive(index)}
-                  aria-label={`Go to slide ${index + 1}`}
-                  aria-current={isActive ? "true" : undefined}
-                  className={`size-3 rounded-full transition ${
-                    isActive ? "bg-[#252B37]" : "bg-[#717680]"
-                  }`}
-                />
-              )
-            })}
+            Medical essentials.
+            <br />
+            For every day of care.
+          </h1>
+          <p className="mt-5 max-w-md text-base leading-7 text-[#526158]">
+            From everyday supplies to specialist equipment, find what you need
+            for your clinic, practice or home.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center gap-4">
+            <Link
+              href="/products"
+              className="inline-flex min-h-12 items-center justify-center rounded-md bg-[#086b43] px-6 text-sm font-semibold text-white transition hover:bg-[#055132]"
+            >
+              Shop all products
+            </Link>
+            <Link
+              href="/categories"
+              className="inline-flex min-h-12 items-center gap-2 px-2 text-sm font-semibold text-[#26553e] hover:underline"
+            >
+              Browse categories
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
           </div>
         </div>
+        <aside
+          className="my-6 mt-0 w-full max-w-xl min-w-0 self-center justify-self-center overflow-hidden rounded-xl border border-[#e0e7e2] bg-white lg:my-8 lg:justify-self-end"
+          aria-label="Featured products"
+          aria-roledescription="carousel"
+        >
+          <div className="px-5 pt-5 sm:px-7">
+            <h2 className="text-[11px] font-semibold tracking-[.12em] text-[#52675b] uppercase">
+              Featured product
+            </h2>
+          </div>
+          <div aria-live="polite" aria-atomic="true">
+            {product ? (
+              <>
+                <Link
+                  href={`/products/${product.slug}`}
+                  aria-label={`View ${product.name}`}
+                  className="group relative mx-5 my-2 block h-48 sm:mx-7 sm:h-56"
+                >
+                  <ProductCardImage
+                    key={product.id}
+                    product={product}
+                    eager
+                    sizes="(max-width:640px) 85vw, 480px"
+                    className="p-2 sm:p-2"
+                  />
+                </Link>
+                <div className="border-t border-[#edf0ee] px-5 pt-4 sm:px-7">
+                  <p className="text-xs text-[#66736b]">
+                    {product.category.name}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-5 gap-y-2">
+                    <h3 className="line-clamp-2 min-w-0 flex-1 basis-40 text-lg leading-6 font-semibold text-[#252b37]">
+                      {product.name}
+                    </h3>
+                    <ProductPrice
+                      price={product.price}
+                      compareAtPrice={product.compareAtPrice}
+                      currency={product.currency}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : query.isPending ? (
+              <div
+                role="status"
+                className="mx-5 mt-4 flex min-h-64 animate-pulse items-center justify-center bg-[#f5f7f5] motion-reduce:animate-none sm:mx-7"
+              >
+                <Package className="size-10 text-[#75877b]" aria-hidden />
+                <span className="sr-only">Loading featured products</span>
+              </div>
+            ) : (
+              <div className="flex min-h-64 flex-col items-start justify-center px-5 sm:px-7">
+                <p className="text-xl font-semibold text-[#252b37]">
+                  Explore the store
+                </p>
+                <p className="mt-3 max-w-sm text-sm leading-6 text-[#667085]">
+                  Browse medical equipment and everyday supplies by category.
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-5 sm:px-7 sm:pb-6">
+            <Link
+              href={product ? `/products/${product.slug}` : "/products"}
+              className="inline-flex min-h-11 items-center justify-center gap-3 rounded-md bg-[#086b43] px-4 text-sm font-semibold text-white transition hover:bg-[#055132]"
+            >
+              {product ? "View product" : "View all products"}
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+            {products.length > 1 && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous featured product"
+                  onClick={() => move(-1)}
+                  className="grid size-11 place-items-center rounded-full text-[#26553e] transition hover:bg-[#f1f5f2]"
+                >
+                  <ArrowLeft className="size-4" aria-hidden />
+                </button>
+                <span className="min-w-8 text-center text-xs whitespace-nowrap text-[#66736b] tabular-nums">
+                  {index + 1} / {products.length}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next featured product"
+                  onClick={() => move(1)}
+                  className="grid size-11 place-items-center rounded-full text-[#26553e] transition hover:bg-[#f1f5f2]"
+                >
+                  <ArrowRight className="size-4" aria-hidden />
+                </button>
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
     </section>
   )

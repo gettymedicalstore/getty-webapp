@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+    apple: "/apple-icon.png",
   },
 }
 
@@ -39,6 +39,12 @@ export default function RootLayout({
       className={`${geist.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <a
+          href="#main-content"
+          className="sr-only fixed top-3 left-3 z-[100] rounded-lg bg-white px-5 py-3 font-semibold text-[#174e35] shadow-lg focus:not-sr-only"
+        >
+          Skip to content
+        </a>
         <Providers>{children}</Providers>
       </body>
     </html>

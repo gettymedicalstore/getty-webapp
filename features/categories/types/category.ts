@@ -5,5 +5,7 @@ export type Category = {
   description: string
   image: string
   productCount: number
+  countKnown?: boolean
+  parentId?: string
   active: boolean
 }

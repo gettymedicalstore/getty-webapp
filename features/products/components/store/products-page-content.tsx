@@ -1,15 +1,24 @@
 "use client"
+import {
+  ValidatedForm,
+  FormInput,
+} from "@/components/shared/form/validated-form"
+import { searchSchema } from "@/lib/form-schemas"
+import { useFormContext, useWatch } from "react-hook-form"
 
 import { useQuery } from "@tanstack/react-query"
 import { Search } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useMemo, useState, type SyntheticEvent } from "react"
+import { useHydrated } from "@/lib/use-hydrated"
+import { useMemo } from "react"
 
 import { productsQueryOptions } from "../../api/product-query-options"
-import { mockProducts } from "../../data/mock-products"
+import { categoriesQueryOptions } from "@/features/categories/api/category-query-options"
+import type { Category } from "@/features/categories/types/category"
 import type { ProductFilters, ProductSort } from "../../types/product"
 import ProductGrid from "./product-grid"
 import ProductPagination from "./product-pagination"
+import ContentError from "@/components/shared/content-error"
 import ProductsPageSkeleton from "./products-page-skeleton"
 
 type ProductsPageContentProps = {
@@ -20,7 +29,7 @@ type CategoryTab = {
   id: string
   label: string
   slug?: string
-  count: number
+  count?: number
 }
 
 export default function ProductsPageContent({
@@ -48,11 +57,14 @@ function ProductsPageContentInner({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [searchValue, setSearchValue] = useState(initialFilters.search ?? "")
-
   const productsQuery = useQuery(productsQueryOptions(initialFilters))
 
-  const categoryTabs = useMemo<CategoryTab[]>(() => createCategoryTabs(), [])
+  const hydrated = useHydrated()
+  const categories = useQuery(categoriesQueryOptions())
+  const categoryTabs = useMemo<CategoryTab[]>(
+    () => createCategoryTabs(hydrated ? (categories.data ?? []) : []),
+    [categories.data, hydrated]
+  )
 
   const activeCategory = initialFilters.category ?? "all"
 
@@ -60,6 +72,14 @@ function ProductsPageContentInner({
     updates: Record<string, string | number | undefined>
   ) {
     const params = new URLSearchParams(searchParams.toString())
+    params.delete("cursor")
+    params.delete("navigation")
+    if (
+      pathname.startsWith("/categories/") &&
+      !("category" in updates) &&
+      initialFilters.category
+    )
+      params.set("category", initialFilters.category)
 
     for (const [key, value] of Object.entries(updates)) {
       if (value === undefined || value === "") {
@@ -72,7 +92,10 @@ function ProductsPageContentInner({
 
     const queryString = params.toString()
 
-    router.push(queryString ? `${pathname}?${queryString}` : pathname, {
+    const destination = pathname.startsWith("/categories/")
+      ? "/products"
+      : pathname
+    router.push(queryString ? `${destination}?${queryString}` : destination, {
       scroll: false,
     })
   }
@@ -84,15 +107,9 @@ function ProductsPageContentInner({
     })
   }
 
-  function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    updateSearchParams({
-      search: searchValue.trim() || undefined,
-      page: 1,
-    })
+  function submitSearch({ search }: { search: string }) {
+    updateSearchParams({ search: search || undefined, page: 1 })
   }
-
   function changeSort(sort: ProductSort) {
     updateSearchParams({
       sort,
@@ -101,8 +118,6 @@ function ProductsPageContentInner({
   }
 
   function clearSearch() {
-    setSearchValue("")
-
     updateSearchParams({
       search: undefined,
       page: 1,
@@ -110,47 +125,37 @@ function ProductsPageContentInner({
   }
 
   return (
-    <section className="bg-white py-10 sm:py-14 lg:py-16">
-      <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
+    <section className="bg-[#f9fbf7] py-10 sm:py-14 lg:py-16">
+      <div className="site-container">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <h1 className="font-geist text-2xl leading-[110%] font-semibold text-[#252B37] sm:text-[32px]">
-            Our Products
-          </h1>
+          <h1 className="section-heading">Explore the store</h1>
 
-          <form
+          <ValidatedForm
+            schema={searchSchema}
+            defaultValues={{ search: initialFilters.search ?? "" }}
             onSubmit={submitSearch}
             className="relative w-full lg:max-w-[360px]"
           >
             <Search
               aria-hidden
-              className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#717680]"
+              className="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#5e6f63]"
             />
 
-            <input
+            <FormInput
+              name="search"
               type="search"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
               placeholder="Search product"
               aria-label="Search products"
               className="focus:border-primary focus:ring-primary/10 h-11 w-full rounded-lg border border-[#D5D7DA] bg-white pr-10 pl-11 text-sm text-[#252B37] shadow-[0_1px_2px_0_rgba(10,13,18,0.05)] outline-none placeholder:text-[#A4A7AE] focus:ring-2"
             />
 
-            {searchValue ? (
-              <button
-                type="button"
-                onClick={clearSearch}
-                aria-label="Clear product search"
-                className="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-md px-1.5 py-1 text-xs font-medium text-[#717680] transition hover:bg-[#F2F4F7] hover:text-[#252B37]"
-              >
-                Clear
-              </button>
-            ) : null}
-          </form>
+            <ClearSearch onClear={clearSearch} />
+          </ValidatedForm>
         </div>
 
         <div className="mt-8 flex flex-col gap-5 border-b border-[#EAECF0] lg:flex-row lg:items-end lg:justify-between">
           <div
-            role="tablist"
+            role="group"
             aria-label="Product categories"
             className="flex [scrollbar-width:none] items-center gap-7 overflow-x-auto [&::-webkit-scrollbar]:hidden"
           >
@@ -164,8 +169,7 @@ function ProductsPageContentInner({
                 <button
                   key={category.id}
                   type="button"
-                  role="tab"
-                  aria-selected={isActive}
+                  aria-pressed={isActive}
                   onClick={() => selectCategory(category.slug)}
                   className={`relative flex shrink-0 cursor-pointer items-center gap-2 pb-3 text-xs font-medium transition-colors sm:text-sm ${
                     isActive
@@ -175,15 +179,17 @@ function ProductsPageContentInner({
                 >
                   <span>{category.label}</span>
 
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] leading-4 ${
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "bg-[#F2F4F7] text-[#475467]"
-                    }`}
-                  >
-                    {category.count}
-                  </span>
+                  {category.count !== undefined && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] leading-4 ${
+                        isActive
+                          ? "bg-primary/10 text-primary"
+                          : "bg-[#F2F4F7] text-[#475467]"
+                      }`}
+                    >
+                      {category.count}
+                    </span>
+                  )}
 
                   {isActive ? (
                     <span
@@ -197,10 +203,14 @@ function ProductsPageContentInner({
           </div>
 
           <label className="mb-3 flex shrink-0 items-center gap-2">
-            <span className="text-xs font-medium text-[#717680]">Sort by:</span>
+            <span className="text-xs font-medium text-[#5e6f63]">Sort by:</span>
 
             <select
-              value={initialFilters.sort ?? "newest"}
+              value={
+                productsQuery.data?.pagination.mode === "cursor"
+                  ? "newest"
+                  : (initialFilters.sort ?? "newest")
+              }
               onChange={(event) =>
                 changeSort(event.target.value as ProductSort)
               }
@@ -209,15 +219,19 @@ function ProductsPageContentInner({
             >
               <option value="newest">Newest</option>
 
-              <option value="oldest">Oldest</option>
+              {productsQuery.data?.pagination.mode !== "cursor" && (
+                <>
+                  <option value="oldest">Oldest</option>
 
-              <option value="price-low">Price: low to high</option>
+                  <option value="price-low">Price: low to high</option>
 
-              <option value="price-high">Price: high to low</option>
+                  <option value="price-high">Price: high to low</option>
 
-              <option value="trending">Trending</option>
+                  <option value="trending">Trending</option>
 
-              <option value="best-selling">Best selling</option>
+                  <option value="best-selling">Best selling</option>
+                </>
+              )}
             </select>
           </label>
         </div>
@@ -237,7 +251,6 @@ function ProductsPageContentInner({
             <EmptyProducts
               hasFilters={hasActiveFilters(initialFilters)}
               onReset={() => {
-                setSearchValue("")
                 router.push(pathname, {
                   scroll: false,
                 })
@@ -250,43 +263,22 @@ function ProductsPageContentInner({
   )
 }
 
-function createCategoryTabs(): CategoryTab[] {
-  const activeProducts = mockProducts.filter((product) => product.active)
-
-  const categoryMap = new Map<
-    string,
-    {
-      label: string
-      count: number
-    }
-  >()
-
-  for (const product of activeProducts) {
-    const slug = product.category.slug
-    const existing = categoryMap.get(slug)
-
-    categoryMap.set(slug, {
-      label: product.category.name,
-      count: (existing?.count ?? 0) + 1,
-    })
-  }
-
-  const categoryTabs = Array.from(categoryMap.entries())
-    .map(([slug, category]) => ({
-      id: slug,
-      label: category.label,
-      slug,
-      count: category.count,
-    }))
-    .sort((first, second) => first.label.localeCompare(second.label))
-
+function createCategoryTabs(categories: Category[]): CategoryTab[] {
   return [
     {
       id: "all",
-      label: "All",
-      count: activeProducts.length,
+      label: "All products",
+      count:
+        categories.length && categories.every((c) => c.countKnown !== false)
+          ? categories.reduce((n, c) => n + c.productCount, 0)
+          : undefined,
     },
-    ...categoryTabs,
+    ...categories.map((c) => ({
+      id: c.id,
+      label: c.name,
+      slug: c.slug,
+      count: c.countKnown === false ? undefined : c.productCount,
+    })),
   ]
 }
 
@@ -296,6 +288,8 @@ function createContentKey(filters: ProductFilters) {
     filters.category ?? "",
     filters.sort ?? "",
     filters.page ?? 1,
+    filters.cursor ?? 0,
+    filters.navigation ?? "next",
   ].join(":")
 }
 
@@ -337,24 +331,28 @@ function EmptyProducts({
 
 function ProductsError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex min-h-72 items-center justify-center rounded-xl border border-[#FECDCA] bg-[#FFFBFA] px-6 text-center">
-      <div>
-        <h2 className="text-base font-semibold text-[#B42318]">
-          Products could not be loaded
-        </h2>
-
-        <p className="mt-2 text-sm text-[#667085]">
-          Something went wrong while loading the products.
-        </p>
-
-        <button
-          type="button"
-          onClick={onRetry}
-          className="bg-primary hover:bg-primary-darker mt-5 cursor-pointer rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors"
-        >
-          Try again
-        </button>
-      </div>
-    </div>
+    <ContentError
+      title="The store is temporarily unavailable"
+      description="We’re having trouble loading products. Please try again shortly."
+      onRetry={onRetry}
+    />
   )
+}
+
+function ClearSearch({ onClear }: { onClear: () => void }) {
+  const { control, setValue } = useFormContext<{ search: string }>()
+  const search = useWatch({ control, name: "search" })
+  return search ? (
+    <button
+      type="button"
+      onClick={() => {
+        setValue("search", "")
+        onClear()
+      }}
+      aria-label="Clear product search"
+      className="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-md px-1.5 py-1 text-xs font-medium text-[#5e6f63] transition hover:bg-[#F2F4F7] hover:text-[#252B37]"
+    >
+      Clear
+    </button>
+  ) : null
 }

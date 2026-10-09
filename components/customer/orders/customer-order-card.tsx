@@ -23,7 +23,7 @@ export default function CustomerOrderCard({ order }: CustomerOrderCardProps) {
     <article className="bg-background rounded-xl border p-5">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div className="flex gap-4">
-          <div className="bg-muted relative size-20 overflow-hidden rounded-lg">
+          <div className="bg-muted relative size-20 shrink-0 overflow-hidden rounded-lg">
             {order.previewImage ? (
               <Image
                 src={order.previewImage}
@@ -35,10 +35,10 @@ export default function CustomerOrderCard({ order }: CustomerOrderCardProps) {
             ) : null}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <p className="text-muted-foreground text-xs">Order number</p>
 
-            <h3 className="mt-1 font-semibold">{order.number}</h3>
+            <h3 className="mt-1 font-semibold break-all">{order.number}</h3>
 
             <p className="text-muted-foreground mt-2 text-xs">
               {order.itemCount} item
@@ -54,7 +54,7 @@ export default function CustomerOrderCard({ order }: CustomerOrderCardProps) {
             {new Intl.NumberFormat("en-NG", {
               style: "currency",
               currency,
-              maximumFractionDigits: 0,
+              maximumFractionDigits: 2,
             }).format(order.total)}
           </p>
         </div>

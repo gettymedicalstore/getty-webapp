@@ -8,7 +8,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --primary: oklch(0.5574 0.1339 156.02);
+  --primary: #087c4a;
   --primary-darker: oklch(0.4844 0.1112 157.43);
 
   --card: oklch(1 0 0);
@@ -22,17 +22,17 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.5574 0.1339 156.02);
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: #f3f6f4;
+  --muted-foreground: #64716b;
 
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.5574 0.1339 156.02);
 
   --destructive: oklch(0.577 0.245 27.325);
 
-  --border: lch(85.89 1.76 260.38);
-  --input: lch(85.89 1.76 260.38);
-  --ring: oklch(0.708 0 0);
+  --border: #e3eae6;
+  --input: #d8e1db;
+  --ring: #058a51;
 
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -102,9 +102,9 @@
    * This assumes your Next.js font is configured with:
    * variable: "--font-inter"
    */
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist), Arial, Helvetica, sans-serif;
   --font-inter: var(--font-inter);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-geist), Arial, Helvetica, sans-serif;
   --font-geist: var(--font-geist);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -135,7 +135,8 @@
 }
 
 @layer utilities {
-  .container-layout {
+  .container-layout,
+  .site-container {
     width: 100%;
     max-width: 80rem;
     margin-inline: auto;
@@ -143,15 +144,34 @@
   }
 
   @media (min-width: 40rem) {
-    .container-layout {
+    .container-layout,
+    .site-container {
       padding-inline: 1.5rem;
     }
   }
 
   @media (min-width: 64rem) {
-    .container-layout {
+    .container-layout,
+    .site-container {
       padding-inline: 2rem;
     }
+  }
+
+  .form-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+    border: 1px solid var(--input);
+    border-radius: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 1rem;
+  }
+
+  .form-input:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 }
 
@@ -839,4 +859,80 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Shared rhythm, focus treatment and content loading states. */
+@layer base {
+  ::selection {
+    background: #d6f0e0;
+    color: #123c2d;
+  }
+  :where(a, button, input, select, textarea):focus-visible {
+    outline: 2px solid #058a51;
+    outline-offset: 4px;
+  }
+  :where(button, [role="button"]):not(:disabled) {
+    cursor: pointer;
+  }
+  :where(input, select, textarea):disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  :where(h1, h2, h3) {
+    text-wrap: balance;
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: #edf1ee;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.75),
+    transparent
+  );
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+@layer utilities {
+  .surface {
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: white;
+    box-shadow: 0 2px 8px -6px rgb(18 48 35 / 0.12);
+  }
+  .section-heading {
+    font-size: clamp(1.5rem, 2.6vw, 2rem);
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    color: #18382c;
+  }
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #327053;
+  }
 }

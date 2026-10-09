@@ -47,8 +47,10 @@ export default function SearchResultsPage({
           </div>
         ) : (
           <div className="mt-8">
-            <p className="mb-5 text-sm text-black/45">
-              {productsQuery.data.pagination.total} results found
+            <p className="mb-5 text-sm text-[#5e6f63]">
+              {productsQuery.data.pagination.mode === "cursor"
+                ? "Products matching your search"
+                : `${productsQuery.data.pagination.total} results found`}
             </p>
 
             <ProductGrid products={productsQuery.data.items} />

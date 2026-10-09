@@ -1,49 +1,41 @@
-import { Box, Clock, Shield } from "@/components/svgs"
-
+import { Search, Layers3, LifeBuoy } from "lucide-react"
 const services = [
   {
-    title: "Discount",
-    description: "Every week new sales",
-    icon: Box,
+    title: "Find what you need",
+    description: "Browse clearly organised medical essentials.",
+    icon: Search,
   },
   {
-    title: "Great Support 24/7",
-    description: "We care your experiences",
-    icon: Clock,
+    title: "Choose with confidence",
+    description: "Compare product details and available options.",
+    icon: Layers3,
   },
   {
-    title: "Secure Payment",
-    description: "100% Secure Payment Method",
-    icon: Shield,
+    title: "A helping hand",
+    description: "Talk to our team when you need support.",
+    icon: LifeBuoy,
   },
 ]
-
 export default function ServiceStrip() {
   return (
-    <section className="relative z-40 -mt-16 px-4 py-12.5 sm:px-6 lg:-mt-30 lg:px-17.5">
-      <div className="mx-auto w-full max-w-277 rounded-[12px] bg-[#FDFDFD] shadow-[0px_24px_100px_0px_#16193212]">
-        <div className="grid gap-0 md:grid-cols-3">
-          {services.map(({ title, description, icon: Icon }) => (
-            <article
-              key={title}
-              className="flex min-h-30 items-center gap-4 px-8 py-6 sm:px-10"
-            >
-              <div className="grid size-12 shrink-0 place-items-center text-[#252b37]">
-                <Icon className="size-10 stroke-[1.4]" aria-hidden="true" />
-              </div>
-
-              <div>
-                <h2 className="font-inter text-[18px] leading-[110%] font-medium text-[#252B37] capitalize">
-                  {title}
-                </h2>
-
-                <p className="font-inter text-sm font-normal text-[#717680]">
-                  {description}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
+    <section className="border-y border-[#e7ece4] bg-white">
+      <div className="site-container grid gap-0 md:grid-cols-3">
+        {services.map(({ title, description, icon: Icon }) => (
+          <article
+            key={title}
+            className="flex items-start gap-3.5 py-6 md:px-5 md:py-7 md:first:pl-0 md:last:pr-0"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#f0f5ec] text-[#54804b]">
+              <Icon className="size-[18px]" strokeWidth={1.5} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-[#354d3c]">{title}</h2>
+              <p className="mt-1.5 max-w-64 text-xs leading-5 text-[#5d6e59]">
+                {description}
+              </p>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   )

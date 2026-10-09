@@ -1,3 +1,4 @@
+import { serverProducts } from "@/features/products/server/catalog-service"
 import type { Metadata } from "next"
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 
@@ -56,7 +57,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const queryClient = getQueryClient()
 
   if (query) {
-    await queryClient.prefetchQuery(productsQueryOptions(filters))
+    await queryClient.prefetchQuery({
+      ...productsQueryOptions(filters),
+      queryFn: () => serverProducts(filters),
+    })
   }
 
   return (

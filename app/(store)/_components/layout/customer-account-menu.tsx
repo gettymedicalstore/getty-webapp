@@ -1,40 +1,38 @@
 "use client"
 
 import { useQueryClient } from "@tanstack/react-query"
-import {
-  ChevronDown,
-  Heart,
-  LayoutDashboard,
-  LogOut,
-  Package,
-  Settings,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react"
-import Link from "next/link"
+import { BadgeCheck, ChevronDown, KeyRound, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { toast } from "sonner"
 
-import type { MockUser } from "@/features/auth/server/mock-session"
-import { Role } from "@/lib/auth/roles"
+import type { GettyUser } from "@/features/auth/types/session"
+import { logout } from "@/features/auth/api/auth"
+import ChangePasswordDialog from "@/features/auth/components/change-password-dialog"
+import { accountRoleLabel } from "@/lib/auth/navigation"
+import { cn } from "@/lib/utils"
 
 type CustomerAccountMenuProps = {
-  user: MockUser
+  user: GettyUser
+  compactOnMobile?: boolean
 }
 
 export default function CustomerAccountMenu({
   user,
+  compactOnMobile = false,
 }: CustomerAccountMenuProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
 
   const [open, setOpen] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
 
-  const dashboardHref = user.role === Role.ADMIN ? "/admin" : "/customer"
+  const roleLabel = accountRoleLabel(user.role)
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -46,6 +44,8 @@ export default function CustomerAccountMenu({
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpen(false)
+        if (menuRef.current?.contains(document.activeElement))
+          triggerRef.current?.focus()
       }
     }
 
@@ -66,18 +66,12 @@ export default function CustomerAccountMenu({
     try {
       setIsLoggingOut(true)
 
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-        },
+      await logout().catch(() => {
+        toast.info(
+          "You are signed out on this device. The server could not confirm token revocation."
+        )
       })
-
-      if (!response.ok) {
-        throw new Error("Unable to log out.")
-      }
-
+      queryClient.clear()
       queryClient.setQueryData(["auth", "session"], {
         user: null,
       })
@@ -99,144 +93,139 @@ export default function CustomerAccountMenu({
   }
 
   return (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-black/3"
+    <>
+      <div
+        ref={menuRef}
+        className="relative"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+        }}
       >
-        <UserAvatar user={user} />
-
-        <span className="hidden min-w-0 lg:block">
-          <span className="block max-w-32 truncate text-sm font-semibold text-[#252B37]">
-            {user.name}
-          </span>
-
-          <span className="block max-w-40 truncate text-xs text-[#717680]">
-            {user.email}
-          </span>
-        </span>
-
-        <ChevronDown
-          aria-hidden
-          className={`hidden size-4 text-[#535862] transition-transform lg:block ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open ? (
-        <div
-          role="menu"
-          className="absolute top-[calc(100%+0.75rem)] right-0 z-70 w-64 overflow-hidden rounded-xl border border-[#E9EAEB] bg-white shadow-[0_20px_40px_-12px_rgba(10,13,18,0.22)]"
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          aria-label={`${roleLabel} account for ${user.name}`}
+          className={cn(
+            "flex min-h-12 cursor-pointer items-center rounded-xl text-left transition hover:bg-black/3",
+            compactOnMobile
+              ? "size-12 justify-center p-1 lg:h-auto lg:w-auto lg:gap-3 lg:px-3 lg:py-1.5"
+              : "gap-3 px-3 py-1.5"
+          )}
         >
-          <div className="border-b border-[#E9EAEB] px-4 py-4">
-            <div className="flex items-center gap-3">
-              <UserAvatar user={user} />
+          <UserAvatar user={user} />
 
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[#252B37]">
-                  {user.name}
-                </p>
+          <span className="hidden min-w-0 lg:block">
+            <span
+              className="block max-w-44 truncate text-[13px] font-semibold text-[#29382e]"
+              title={user.name}
+            >
+              {user.name}
+            </span>
 
-                <p className="truncate text-xs text-[#717680]">{user.email}</p>
+            <span className="mt-0.5 block max-w-44 truncate text-[11px] text-[#68766d]">
+              {roleLabel}
+            </span>
+          </span>
+
+          <ChevronDown
+            aria-hidden
+            className={`hidden size-4 text-[#535862] transition-transform lg:block ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+
+        {open ? (
+          <div
+            id={menuId}
+            role="region"
+            aria-label={`${roleLabel} account`}
+            className="absolute top-[calc(100%+0.75rem)] right-0 z-70 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[#E9EAEB] bg-white shadow-[0_20px_40px_-12px_rgba(10,13,18,0.22)]"
+          >
+            <div className="px-4 py-4">
+              <div className="flex items-center gap-3">
+                <UserAvatar user={user} />
+
+                <div className="min-w-0">
+                  <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-[#252B37]">
+                    <span className="min-w-0 truncate">{user.name}</span>
+                    {user.tenantStatus === "verified" && (
+                      <span
+                        role="img"
+                        aria-label="Verified organisation"
+                        title="Verified organisation"
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e8f5ec] text-[#14834e]"
+                      >
+                        <BadgeCheck className="size-4" aria-hidden />
+                      </span>
+                    )}
+                  </p>
+
+                  <p className="truncate text-xs text-[#717680]">
+                    {user.email}
+                  </p>
+                </div>
               </div>
+
+              {user.tenant && (
+                <p className="mt-2 text-xs break-words text-[#717680]">
+                  {user.tenant}
+                </p>
+              )}
+            </div>
+
+            <div className="border-t border-[#E9EAEB] p-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  setPasswordOpen(true)
+                }}
+                aria-haspopup="dialog"
+                className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-[#344e3b] transition hover:bg-[#f1f6f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#008751]"
+              >
+                <KeyRound aria-hidden className="size-5" />
+                Change password
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#B42318] transition hover:bg-[#FEF3F2] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <LogOut aria-hidden className="size-5" />
+
+                {isLoggingOut ? "Logging out..." : "Logout"}
+              </button>
             </div>
           </div>
-
-          <nav className="p-2">
-            <AccountMenuLink
-              href={dashboardHref}
-              label={user.role === Role.ADMIN ? "Admin Dashboard" : "Dashboard"}
-              icon={user.role === Role.ADMIN ? ShieldCheck : LayoutDashboard}
-              onNavigate={() => setOpen(false)}
-            />
-
-            {user.role === Role.CUSTOMER ? (
-              <>
-                <AccountMenuLink
-                  href="/customer/orders"
-                  label="My Orders"
-                  icon={Package}
-                  onNavigate={() => setOpen(false)}
-                />
-
-                <AccountMenuLink
-                  href="/wishlist"
-                  label="My Wishlist"
-                  icon={Heart}
-                  onNavigate={() => setOpen(false)}
-                />
-
-                <AccountMenuLink
-                  href="/customer/profile"
-                  label="Account Settings"
-                  icon={Settings}
-                  onNavigate={() => setOpen(false)}
-                />
-              </>
-            ) : null}
-          </nav>
-
-          <div className="border-t border-[#E9EAEB] p-2">
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#B42318] transition hover:bg-[#FEF3F2] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <LogOut aria-hidden className="size-4" />
-
-              {isLoggingOut ? "Logging out..." : "Logout"}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+      <ChangePasswordDialog
+        open={passwordOpen}
+        onOpenChange={setPasswordOpen}
+      />
+    </>
   )
 }
 
-function UserAvatar({ user }: { user: MockUser }) {
+function UserAvatar({ user }: { user: GettyUser }) {
   const initials = getInitials(user.name)
 
   return (
-    <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-[#D7FFEE] text-sm font-bold text-[#027A48]">
+    <span className="relative grid size-10 shrink-0 place-items-center rounded-full border border-[#d9e7db] bg-[#edf4ea] text-[13px] font-semibold text-[#41644b]">
       {initials}
 
-      <span
-        aria-label="Online"
-        className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-white bg-[#12B76A]"
-      />
+      {user.status === "active" && (
+        <span
+          aria-label="Active account"
+          className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-white bg-[#12B76A]"
+        />
+      )}
     </span>
-  )
-}
-
-type AccountMenuLinkProps = {
-  href: string
-  label: string
-  icon: typeof UserRound
-  onNavigate: () => void
-}
-
-function AccountMenuLink({
-  href,
-  label,
-  icon: Icon,
-  onNavigate,
-}: AccountMenuLinkProps) {
-  return (
-    <Link
-      href={href}
-      role="menuitem"
-      onClick={onNavigate}
-      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#414651] transition hover:bg-[#F5F5F5]"
-    >
-      <Icon aria-hidden className="size-4 text-[#717680]" />
-      {label}
-    </Link>
   )
 }
 

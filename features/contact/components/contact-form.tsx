@@ -19,6 +19,7 @@ import {
 export default function ContactForm() {
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
+    shouldUseNativeValidation: false,
     defaultValues: {
       name: "",
       email: "",

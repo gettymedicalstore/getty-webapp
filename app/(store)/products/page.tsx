@@ -1,13 +1,13 @@
-import type { Metadata } from "next"
-import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
-
-import ProductsPageContent from "@/features/products/components/store/products-page-content"
 import { productsQueryOptions } from "@/features/products/api/product-query-options"
-import { getQueryClient } from "@/lib/query/get-query-client"
+import ProductsPageContent from "@/features/products/components/store/products-page-content"
+import { serverProducts } from "@/features/products/server/catalog-service"
 import {
   normaliseProductFilters,
   type ProductSearchParams,
 } from "@/features/products/utils/normalise-product-filters"
+import { getQueryClient } from "@/lib/query/get-query-client"
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
+import type { Metadata } from "next"
 
 export const metadata: Metadata = {
   title: "Medical Products",
@@ -28,7 +28,10 @@ export default async function ProductsPage({
 
   const queryClient = getQueryClient()
 
-  await queryClient.prefetchQuery(productsQueryOptions(filters))
+  await queryClient.prefetchQuery({
+    ...productsQueryOptions(filters),
+    queryFn: () => serverProducts(filters),
+  })
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>

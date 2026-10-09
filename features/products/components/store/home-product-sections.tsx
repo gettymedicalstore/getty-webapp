@@ -1,5 +1,6 @@
 "use client"
 
+import ContentError from "@/components/shared/content-error"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import Link from "next/link"
@@ -76,11 +77,9 @@ export function RecentlyAddedProductsSection() {
 
   return (
     <section className="overflow-hidden bg-white py-12 sm:py-14 lg:py-16">
-      <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
+      <div className="site-container">
         <div className="mb-7 flex items-center justify-between gap-6">
-          <h2 className="font-geist text-xl leading-7 font-semibold text-[#252B37] sm:text-2xl">
-            Recently Added
-          </h2>
+          <h2 className="section-heading">Recently Added</h2>
 
           <div className="flex shrink-0 items-center gap-2">
             <button
@@ -110,7 +109,7 @@ export function RecentlyAddedProductsSection() {
         ) : query.data?.length ? (
           <div
             ref={railRef}
-            className="grid snap-x snap-mandatory scrollbar-none auto-cols-[82%] grid-flow-col gap-5 overflow-x-auto scroll-smooth pb-2 sm:auto-cols-[47%] lg:auto-cols-[31%] xl:auto-cols-[calc((100%-60px)/4)] [&::-webkit-scrollbar]:hidden"
+            className="grid snap-x snap-mandatory scrollbar-none auto-cols-[100%] grid-flow-col gap-6 overflow-x-auto scroll-smooth pb-2 sm:auto-cols-[calc((100%-24px)/2)] lg:auto-cols-[calc((100%-72px)/4)] [&::-webkit-scrollbar]:hidden"
           >
             {query.data.map((product) => (
               <div
@@ -142,11 +141,9 @@ export function OurProductsSection() {
 
   return (
     <section className="bg-white py-14 sm:py-16 lg:py-20">
-      <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
+      <div className="site-container">
         <div className="flex items-center justify-between gap-6">
-          <h2 className="font-geist text-2xl leading-[110%] font-semibold tracking-normal text-[#252B37] sm:text-[32px]">
-            Our Products
-          </h2>
+          <h2 className="section-heading">Our Products</h2>
 
           <Link
             href="/products"
@@ -162,33 +159,39 @@ export function OurProductsSection() {
             aria-label="Product filters"
             className="flex [scrollbar-width:none] items-center gap-7 overflow-x-auto [&::-webkit-scrollbar]:hidden"
           >
-            {productTabs.map((tab) => {
-              const isActive = activeTab.id === tab.id
-
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveTab(tab)}
-                  className={`relative shrink-0 cursor-pointer pb-3 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "text-primary"
-                      : "hover:text-primary text-[#475467]"
-                  }`}
-                >
-                  {tab.label}
-
-                  {isActive ? (
-                    <span
-                      aria-hidden="true"
-                      className="bg-primary absolute right-0 bottom-0 left-0 h-0.5 rounded-full"
-                    />
-                  ) : null}
-                </button>
+            {productTabs
+              .filter(
+                (tab) =>
+                  query.data?.pagination.mode !== "cursor" ||
+                  tab.sort === "newest"
               )
-            })}
+              .map((tab) => {
+                const isActive = activeTab.id === tab.id
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setActiveTab(tab)}
+                    className={`relative shrink-0 cursor-pointer pb-3 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "text-primary"
+                        : "hover:text-primary text-[#475467]"
+                    }`}
+                  >
+                    {tab.label}
+
+                    {isActive ? (
+                      <span
+                        aria-hidden="true"
+                        className="bg-primary absolute right-0 bottom-0 left-0 h-0.5 rounded-full"
+                      />
+                    ) : null}
+                  </button>
+                )
+              })}
           </div>
         </div>
 
@@ -218,7 +221,7 @@ type ProductRailSectionProps = {
 function ProductRailSection({ title, query }: ProductRailSectionProps) {
   return (
     <section className="overflow-hidden bg-white py-14 sm:py-16 lg:py-20">
-      <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
+      <div className="site-container">
         {query.isPending ? (
           <>
             <SectionHeading title={title} />
@@ -240,9 +243,7 @@ function ProductRailSection({ title, query }: ProductRailSectionProps) {
 function SectionHeading({ title }: { title: string }) {
   return (
     <div className="mb-8">
-      <h2 className="font-geist text-2xl leading-[110%] font-semibold tracking-normal text-[#252B37] sm:text-[32px]">
-        {title}
-      </h2>
+      <h2 className="section-heading">{title}</h2>
     </div>
   )
 }
@@ -277,9 +278,7 @@ function ProductRail({
   return (
     <>
       <div className="mb-8 flex items-center justify-between gap-6">
-        <h2 className="font-geist text-2xl leading-[110%] font-semibold tracking-normal text-[#252B37] sm:text-[32px]">
-          {title}
-        </h2>
+        <h2 className="section-heading">{title}</h2>
 
         <div className="flex shrink-0 items-center gap-3">
           <button
@@ -307,7 +306,7 @@ function ProductRail({
       ) : (
         <div
           ref={railRef}
-          className="grid snap-x snap-mandatory [scrollbar-width:none] auto-cols-[82%] grid-flow-col gap-5 overflow-x-auto scroll-smooth pb-2 sm:auto-cols-[47%] lg:auto-cols-[31%] xl:auto-cols-[calc((100%-60px)/4)] [&::-webkit-scrollbar]:hidden"
+          className="grid snap-x snap-mandatory [scrollbar-width:none] auto-cols-[100%] grid-flow-col gap-6 overflow-x-auto scroll-smooth pb-2 sm:auto-cols-[calc((100%-24px)/2)] lg:auto-cols-[calc((100%-72px)/4)] [&::-webkit-scrollbar]:hidden"
         >
           {products.map((product) => (
             <div
@@ -330,7 +329,7 @@ function ProductGrid({ products }: { products: Product[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}
@@ -356,16 +355,9 @@ function EmptyProductSection() {
 
 function ProductSectionError() {
   return (
-    <div className="flex min-h-60 items-center justify-center rounded-xl border border-[#FECDCA] bg-[#FFFBFA] px-6 text-center">
-      <div>
-        <h3 className="text-base font-semibold text-[#B42318]">
-          Unable to load products
-        </h3>
-
-        <p className="mt-2 text-sm text-[#667085]">
-          Please refresh the page and try again.
-        </p>
-      </div>
-    </div>
+    <ContentError
+      title="Products will be back shortly"
+      description="We’re having trouble connecting to the store. Please try again in a moment."
+    />
   )
 }

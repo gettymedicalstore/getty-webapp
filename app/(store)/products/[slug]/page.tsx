@@ -1,11 +1,9 @@
+import { serverProduct as getProduct } from "@/features/products/server/catalog-service"
 import type { Metadata } from "next"
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query"
 import { notFound } from "next/navigation"
 
-import {
-  getProduct,
-  productQueryOptions,
-} from "@/features/products/api/get-product"
+import { productQueryOptions } from "@/features/products/api/get-product"
 import ProductDetails from "@/features/products/components/store/product-details"
 import { getQueryClient } from "@/lib/query/get-query-client"
 
@@ -64,7 +62,10 @@ export default async function ProductDetailsPage({
 
   const queryClient = getQueryClient()
 
-  const product = await queryClient.fetchQuery(productQueryOptions(slug))
+  const product = await queryClient.fetchQuery({
+    ...productQueryOptions(slug),
+    queryFn: () => getProduct(slug),
+  })
 
   if (!product) {
     notFound()

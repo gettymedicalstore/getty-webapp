@@ -3,7 +3,6 @@ import HeroCarousel from "@/components/store/home/hero-carousel"
 import ServiceStrip from "@/components/store/home/service-strip"
 import Testimonials from "@/components/store/home/testimonials"
 import {
-  FeaturedProductsSection,
   OurProductsSection,
   RecentlyAddedProductsSection,
 } from "@/features/products/components/store/home-product-sections"
@@ -12,16 +11,15 @@ export default function HomePage() {
   return (
     <>
       <HeroCarousel />
-      <ServiceStrip />
+      <OurProductsSection />
 
-      <FeaturedProductsSection />
+      <RecentlyAddedProductsSection />
 
       <CategoryCarousel />
 
-      <OurProductsSection />
+      <ServiceStrip />
 
       <Testimonials />
-      <RecentlyAddedProductsSection />
     </>
   )
 }

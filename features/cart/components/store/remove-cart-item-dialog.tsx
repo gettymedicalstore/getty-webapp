@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -8,13 +9,14 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 
 type RemoveCartItemDialogProps = {
   open: boolean
   productName: string
   onOpenChange: (open: boolean) => void
-  onConfirm: () => void
+  onConfirm: () => boolean | void | Promise<boolean | void>
 }
 
 export default function RemoveCartItemDialog({
@@ -23,13 +25,24 @@ export default function RemoveCartItemDialog({
   onOpenChange,
   onConfirm,
 }: RemoveCartItemDialogProps) {
-  function handleConfirm() {
-    onConfirm()
-    onOpenChange(false)
+  const [busy, setBusy] = useState(false)
+  async function handleConfirm() {
+    if (busy) return
+    setBusy(true)
+    try {
+      if ((await onConfirm()) !== false) onOpenChange(false)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!busy) onOpenChange(value)
+      }}
+    >
       <DialogContent
         showCloseButton={false}
         className="w-[calc(100%-2rem)] max-w-sm rounded-xl border-0 p-5 shadow-2xl"
@@ -47,24 +60,25 @@ export default function RemoveCartItemDialog({
           <span className="font-semibold">{productName}</span> from your cart?
         </DialogDescription>
 
-        <div className="mt-3 grid gap-2">
+        <DialogFooter className="mt-3">
           <Button
             type="button"
-            onClick={handleConfirm}
-            className="h-10 rounded-xl bg-[#D92D20] text-[14px] leading-5 font-semibold text-white hover:bg-[#B42318]"
-          >
-            Remove Item
-          </Button>
-
-          <Button
-            type="button"
+            disabled={busy}
             variant="outline"
             onClick={() => onOpenChange(false)}
             className="h-10 cursor-pointer rounded-xl text-[14px] leading-5"
           >
             Close
           </Button>
-        </div>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={handleConfirm}
+            className="h-10 rounded-xl bg-[#D92D20] text-[14px] leading-5 font-semibold text-white hover:bg-[#B42318]"
+          >
+            {busy ? "Removing…" : "Remove Item"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

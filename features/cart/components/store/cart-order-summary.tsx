@@ -1,399 +1,121 @@
 "use client"
-
-import Image from "next/image"
-import { useMemo, useState } from "react"
-import { toast } from "sonner"
-
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { useAuthDialog } from "@/features/auth/components/auth-dialog-provider"
+import Link from "next/link"
+import { LockKeyhole, ArrowRight } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
-import { useCheckoutPayment } from "@/features/checkout/hooks/use-checkout-payment"
-import type {
-  CheckoutPaymentMode,
-  PaymentFrequency,
-} from "@/features/checkout/types/payment"
-
+import { useCart } from "../../hooks/use-cart"
+import { Skeleton } from "@/components/ui/skeleton"
+import { authHref, reauthenticationHref } from "@/lib/auth/navigation"
+import { formatCurrency } from "@/features/products/utils/format-currency"
 import type { CartItem } from "../../types/cart"
 
-const deliveryFee = 1800
-
-const installmentOptions = [4, 6, 8, 10, 12, 14]
-
-const paymentMethods = [
-  {
-    name: "Visa",
-    image: "/images/payments/visa.svg",
-  },
-  {
-    name: "Mastercard",
-    image: "/images/payments/mastercard.svg",
-  },
-  {
-    name: "PayPal",
-    image: "/images/payments/paypal.svg",
-  },
-  {
-    name: "Verve",
-    image: "/images/payments/verve.svg",
-  },
-]
-
-type CartOrderSummaryProps = {
-  items: CartItem[]
-}
-
-export default function CartOrderSummary({ items }: CartOrderSummaryProps) {
-  const checkoutMutation = useCheckoutPayment()
-  const { openLogin } = useAuthDialog()
-
-  const {
-    data: session,
-    refetch: refetchSession,
-    isLoading: isSessionLoading,
-    isFetching: isSessionFetching,
-  } = useAuthSession()
-
-  const [paymentPlanEnabled, setPaymentPlanEnabled] = useState(false)
-
-  const [frequency, setFrequency] = useState<PaymentFrequency>("weekly")
-
-  const [installmentCount, setInstallmentCount] = useState<number | null>(null)
-
-  const authenticatedEmail = session?.user?.email?.trim().toLowerCase() ?? ""
-
-  const subtotal = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum + item.product.price * normaliseQuantity(item.quantity),
-        0
-      ),
-    [items]
-  )
-
-  const total = subtotal + deliveryFee
-  const totalKobo = Math.round(total * 100)
-
-  const compatibleOptions = installmentOptions.filter(
-    (count) => totalKobo % count === 0
-  )
-
-  const installmentAmount =
-    installmentCount !== null && totalKobo % installmentCount === 0
-      ? total / installmentCount
-      : null
-
-  const paymentMode: CheckoutPaymentMode =
-    paymentPlanEnabled && installmentCount !== null
-      ? {
-          type: "installment",
-          frequency,
-          installmentCount,
-        }
-      : {
-          type: "full",
-        }
-
-  const isSessionBusy = isSessionLoading || isSessionFetching
-
-  const isBusy = checkoutMutation.isPending || isSessionBusy
-
-  function togglePaymentPlan(checked: boolean) {
-    setPaymentPlanEnabled(checked)
-
-    if (!checked) {
-      setInstallmentCount(null)
-    }
-  }
-
-  function validateCheckout() {
-    if (items.length === 0) {
-      toast.error("Your cart is empty.")
-      return false
-    }
-
-    if (paymentPlanEnabled && installmentCount === null) {
-      toast.error("Select the total number of instalments.")
-
-      return false
-    }
-
-    return true
-  }
-
-  function startCheckout(email: string) {
-    const normalisedEmail = email.trim().toLowerCase()
-
-    if (!normalisedEmail) {
-      toast.error("Your account email address could not be loaded.")
-
-      return
-    }
-
-    checkoutMutation.mutate(
-      {
-        email: normalisedEmail,
-
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: normaliseQuantity(item.quantity),
-        })),
-
-        paymentMode,
-      },
-      {
-        onError: (error) => {
-          console.error("Checkout initialization failed:", error)
-
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Checkout could not be started."
-          )
-        },
-      }
+export default function CartOrderSummary({ items }: { items: CartItem[] }) {
+  const session = useAuthSession(),
+    state = useCart(),
+    cart = state.cart,
+    remote = cart.mode === "remote"
+  const unavailable =
+    cart.expired ||
+    items.some(
+      (item) => item.purchasable === false || item.priceAvailable === false
     )
-  }
-
-  async function continueAfterLogin() {
-    const result = await refetchSession()
-
-    if (result.isError) {
-      console.error("Session refetch failed after login:", result.error)
-
-      toast.error(
-        result.error instanceof Error
-          ? result.error.message
-          : "Your session could not be loaded after login."
-      )
-
-      return
-    }
-
-    const loggedInEmail = result.data?.user?.email?.trim().toLowerCase() ?? ""
-
-    if (!loggedInEmail) {
-      toast.error(
-        "Login succeeded, but your account email could not be loaded."
-      )
-
-      return
-    }
-
-    startCheckout(loggedInEmail)
-  }
-
-  function handleCheckout() {
-    if (isBusy) {
-      return
-    }
-
-    if (!validateCheckout()) {
-      return
-    }
-
-    if (authenticatedEmail) {
-      startCheckout(authenticatedEmail)
-      return
-    }
-
-    openLogin({
-      onSuccess: continueAfterLogin,
-    })
-  }
-
-  function getCheckoutButtonLabel() {
-    if (checkoutMutation.isPending) {
-      return "Preparing payment..."
-    }
-
-    if (isSessionBusy) {
-      return "Checking account..."
-    }
-
-    if (!authenticatedEmail) {
-      return "Login to Checkout"
-    }
-
-    if (paymentPlanEnabled) {
-      return "Make First Payment"
-    }
-
-    return "Checkout"
-  }
-
+  const blocked =
+    state.isUpdating || state.syncError || unavailable || !items.length
+  const subtotal = remote
+    ? cart.subtotal
+    : items.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+  const destination = session.data?.user
+    ? session.data.user.role === "customer"
+      ? "/checkout"
+      : reauthenticationHref("/checkout")
+    : authHref("/login", "/checkout")
   return (
-    <aside className="self-start rounded-xl bg-[#F7F7F7] p-5 sm:p-6">
-      <h2 className="text-2xl leading-8 font-semibold text-[#252B37]">
-        Checkout Summary
+    <aside className="min-w-0 self-start rounded-2xl border bg-[#f7f9f5] p-5 sm:p-6 lg:sticky lg:top-6">
+      <h2 className="text-xl font-semibold tracking-tight text-[#23412d]">
+        Order summary
       </h2>
-
-      <dl className="mt-7 space-y-5">
-        <SummaryRow label="Subtotal" value={subtotal} />
-
-        <SummaryRow label="Delivery Fee" value={deliveryFee} />
-
-        <div className="flex items-end justify-between gap-5">
-          <dt className="text-lg leading-7 text-[#252B37]">Total Amount</dt>
-
-          <dd className="flex items-baseline font-semibold text-[#252B37]">
-            <span className="mr-1 text-xs">NGN</span>
-
-            <span className="text-2xl leading-8">{formatPrice(total)}</span>
+      <dl className="mt-6 space-y-4 text-sm">
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">Subtotal</dt>
+          <dd className="font-medium">{formatCurrency(subtotal)}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">Delivery</dt>
+          <dd className="text-right">Calculated at checkout</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-t pt-5 text-lg font-semibold">
+          <dt>Estimated total before delivery</dt>
+          <dd className="text-right [overflow-wrap:anywhere]">
+            {formatCurrency(subtotal)}
           </dd>
         </div>
       </dl>
-
-      <div className="my-7 h-px bg-[#E9EAEB]" />
-
-      <div className="rounded-md border border-[#E9EAEB] bg-white p-4">
-        <label className="flex cursor-pointer gap-3">
-          <Checkbox
-            checked={paymentPlanEnabled}
-            onCheckedChange={(checked) => togglePaymentPlan(checked === true)}
-            disabled={isBusy}
-            aria-label="Enable payment plan"
-            className="mt-0.5"
-          />
-
-          <span>
-            <span className="block text-sm font-medium text-[#414651]">
-              Payment Plan setup
-            </span>
-
-            <span className="block text-xs leading-4.5 text-[#717680]">
-              Pay in instalments by setting the frequency
-            </span>
-          </span>
-        </label>
-
-        {paymentPlanEnabled && (
-          <div className="mt-4">
-            <div className="flex gap-2">
-              {(["weekly", "monthly"] as PaymentFrequency[]).map((option) => {
-                const active = frequency === option
-
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => setFrequency(option)}
-                    aria-pressed={active}
-                    className={`h-9 rounded-lg border px-4 text-xs font-medium capitalize transition ${
-                      active
-                        ? "border-[#058A51] bg-[#058A51] text-white"
-                        : "border-[#D5D7DA] bg-white text-[#414651] hover:bg-[#FAFAFA]"
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                  >
-                    Pay {option}
-                  </button>
-                )
-              })}
-            </div>
-
-            <p className="mt-5 text-xs text-[#535862]">
-              Select the total number of instalments
-            </p>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              {installmentOptions.map((count) => {
-                const active = installmentCount === count
-
-                const compatible = compatibleOptions.includes(count)
-
-                return (
-                  <button
-                    key={count}
-                    type="button"
-                    disabled={!compatible || isBusy}
-                    aria-pressed={active}
-                    title={
-                      compatible
-                        ? undefined
-                        : "The total cannot be divided evenly by this option."
-                    }
-                    onClick={() => setInstallmentCount(count)}
-                    className={`size-9 rounded-lg border text-xs font-medium transition ${
-                      active
-                        ? "border-[#058A51] bg-[#058A51] text-white"
-                        : "border-[#D5D7DA] bg-white text-[#414651] hover:bg-[#FAFAFA]"
-                    } disabled:cursor-not-allowed disabled:opacity-35`}
-                  >
-                    {count}
-                  </button>
-                )
-              })}
-            </div>
-
-            {installmentAmount !== null && (
-              <p className="mt-5 text-xs text-[#535862]">
-                You will pay{" "}
-                <strong>NGN {formatPrice(installmentAmount)}</strong>{" "}
-                {frequency}.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <Button
-        type="button"
-        onClick={handleCheckout}
-        disabled={isBusy || items.length === 0}
-        aria-busy={isBusy}
-        className="mt-5 h-12 w-full rounded-lg bg-[#058A51] text-sm font-semibold text-white hover:bg-[#027A48]"
-      >
-        {getCheckoutButtonLabel()}
-      </Button>
-
-      <div className="mt-8">
-        <p className="text-sm text-[#252B37]">100% Guarantee Safe Checkout</p>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {paymentMethods.map((method) => (
-            <div
-              key={method.name}
-              className="relative h-6 w-11 overflow-hidden"
-            >
-              <Image
-                src={method.image}
-                alt={method.name}
-                fill
-                sizes="44px"
-                className="object-contain p-0.5"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      {unavailable && (
+        <p
+          role="status"
+          className="mt-5 rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900"
+        >
+          Update the unavailable items in your bag before continuing.
+        </p>
+      )}
+      {remote ? (
+        <>
+          <button
+            type="button"
+            disabled
+            className="mt-6 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#e5ebe0] px-4 text-sm font-semibold text-[#52614a]"
+          >
+            Checkout temporarily unavailable
+          </button>
+          <p className="text-muted-foreground mt-3 text-sm leading-6">
+            Your bag is saved to your account.{" "}
+            <Link href="/contact" className="text-primary underline">
+              Contact us
+            </Link>{" "}
+            for help with your order.
+          </p>
+        </>
+      ) : session.isPending ? (
+        <Skeleton className="mt-6 h-12 w-full" />
+      ) : session.isError ? (
+        <p role="alert" className="mt-6 text-sm">
+          Your account could not be checked.{" "}
+          <button
+            type="button"
+            onClick={() => void session.refetch()}
+            className="text-primary min-h-11 underline"
+          >
+            Try again
+          </button>
+        </p>
+      ) : blocked ? (
+        <button
+          type="button"
+          disabled
+          className="bg-primary mt-6 min-h-12 w-full rounded-xl text-sm font-semibold text-white opacity-50"
+        >
+          {state.isUpdating
+            ? "Updating your bag…"
+            : state.syncError
+              ? "Resolve bag items to checkout"
+              : "Continue to checkout"}
+        </button>
+      ) : (
+        <Link
+          href={destination}
+          className="bg-primary hover:bg-primary-darker mt-6 flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white"
+        >
+          Checkout
+          <ArrowRight className="size-4" />
+        </Link>
+      )}
+      {!remote && (
+        <p className="text-muted-foreground mt-4 flex items-start gap-2 text-xs leading-5">
+          <LockKeyhole className="mt-0.5 size-4 shrink-0" />
+          {session.data?.user?.role === "customer"
+            ? "Prices and availability are confirmed when you order."
+            : "Sign in with a customer account at checkout. Prices and availability are confirmed when you order."}
+        </p>
+      )}
     </aside>
   )
-}
-
-function SummaryRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between gap-5">
-      <dt className="text-lg text-[#252B37]">{label}</dt>
-
-      <dd className="flex items-baseline font-medium text-[#252B37]">
-        <span className="mr-1 text-xs">NGN</span>
-
-        <span className="text-lg">{formatPrice(value)}</span>
-      </dd>
-    </div>
-  )
-}
-
-function normaliseQuantity(value: number | undefined) {
-  const quantity = Number(value)
-
-  return Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1
-}
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("en-NG", {
-    maximumFractionDigits: 0,
-  }).format(value)
 }

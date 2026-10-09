@@ -1,4 +1,5 @@
 "use client"
+import { ProductGridSkeleton } from "@/components/shared/loading-skeletons"
 
 import { Heart } from "lucide-react"
 import Link from "next/link"
@@ -16,7 +17,9 @@ export default function WishlistPageContent() {
         <h1 className="text-3xl font-extrabold">Wishlist</h1>
 
         {wishlist.isPending ? (
-          <div className="mt-8 h-96 animate-pulse rounded-xl bg-black/5" />
+          <div className="mt-8">
+            <ProductGridSkeleton />
+          </div>
         ) : wishlist.products.length === 0 ? (
           <div className="mt-8 rounded-xl bg-white px-6 py-16 text-center">
             <div className="bg-primary/10 text-primary mx-auto grid size-16 place-items-center rounded-full">

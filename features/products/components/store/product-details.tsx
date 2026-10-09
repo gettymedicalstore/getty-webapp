@@ -1,4 +1,6 @@
 "use client"
+import { ProductDetailSkeleton } from "@/components/shared/loading-skeletons"
+import ContentError from "@/components/shared/content-error"
 
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -12,6 +14,7 @@ import {
   Star,
 } from "lucide-react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -20,66 +23,68 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "@/features/cart/hooks/use-cart"
 import { useWishlist } from "@/features/wishlist/hooks/use-wishlist"
 
+import {
+  isProductInStock,
+  productMaximum,
+  productMinimum,
+} from "../../utils/availability"
+import ProductPrice from "./product-price"
+import ProductReviews from "./product-reviews"
 import { productQueryOptions } from "../../api/get-product"
-
-const paymentMethods = [
-  {
-    name: "Visa",
-    image: "/images/payments/visa.svg",
-  },
-  {
-    name: "Mastercard",
-    image: "/images/payments/mastercard.svg",
-  },
-  {
-    name: "Verve",
-    image: "/images/payments/verve.svg",
-  },
-  {
-    name: "PayPal",
-    image: "/images/payments/paypal.svg",
-  },
-]
 
 export default function ProductDetails({ slug }: { slug: string }) {
   const productQuery = useQuery(productQueryOptions(slug))
 
+  const router = useRouter()
   const cart = useCart()
   const wishlist = useWishlist()
 
   const [quantity, setQuantity] = useState(1)
+  const [variantId, setVariantId] = useState<string | null>(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
 
   if (productQuery.isPending) {
-    return <ProductDetailsSkeleton />
+    return <ProductDetailSkeleton />
   }
 
   if (productQuery.isError || !productQuery.data) {
     return (
-      <section className="bg-[#F5F5F5] py-20">
-        <div className="mx-auto w-full max-w-330 px-4 text-center lg:px-6 xl:px-0">
-          <h1 className="text-2xl font-semibold text-[#252B37]">
-            Product could not be loaded
-          </h1>
-
-          <button
-            type="button"
-            onClick={() => productQuery.refetch()}
-            className="bg-primary hover:bg-primary-darker mt-5 cursor-pointer rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition"
-          >
-            Try again
-          </button>
-        </div>
+      <section className="site-container py-12">
+        <h1 className="sr-only">Product details</h1>
+        <ContentError
+          title="This product is temporarily unavailable"
+          onRetry={() => void productQuery.refetch()}
+        />
       </section>
     )
   }
 
-  const product = productQuery.data
+  const baseProduct = productQuery.data
+  const variant =
+    baseProduct.variants?.find((v) => v.id === variantId) ??
+    baseProduct.variants?.find((v) => v.isDefault) ??
+    baseProduct.variants?.[0]
+  const product = variant
+    ? {
+        ...baseProduct,
+        variantId: variant.id,
+        price: variant.price,
+        sku: variant.sku,
+        inStock: variant.inStock,
+        minimumOrderQuantity: variant.minimumOrderQuantity,
+        saleUnit: variant.saleUnit,
+        unitsPerPack: variant.unitsPerPack,
+      }
+    : baseProduct
+  const minimum = productMinimum(product)
+  const orderQuantity = Math.max(minimum, quantity)
   const images = product.images?.length ? product.images : [product.image]
   // const images = product.images?.length > 0 ? product.images : [product.image]
 
   const selectedImage = images[selectedImageIndex] ?? product.image
-  const available = product.stock > 0
+  const available =
+    isProductInStock(product) &&
+    (product.source !== "remote" || Boolean(variant))
   const isWishlisted = wishlist.hasProduct(product.id)
   const rating = Math.min(5, Math.max(0, product.rating ?? 0))
 
@@ -96,11 +101,13 @@ export default function ProductDetails({ slug }: { slug: string }) {
   }
 
   function decreaseQuantity() {
-    setQuantity((current) => Math.max(1, current - 1))
+    setQuantity((current) => Math.max(minimum, current - 1))
   }
 
   function increaseQuantity() {
-    setQuantity((current) => Math.min(product.stock, current + 1))
+    setQuantity((current) =>
+      Math.min(productMaximum(product), Math.max(minimum, current) + 1)
+    )
   }
 
   async function copyProductLink() {
@@ -153,7 +160,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
       return
     }
 
-    cart.addProduct(product, quantity)
+    void cart.addProduct(product, orderQuantity)
   }
 
   function handleBuyNow() {
@@ -161,15 +168,17 @@ export default function ProductDetails({ slug }: { slug: string }) {
       return
     }
 
-    cart.addProduct(product, quantity)
-    window.location.assign("/checkout")
+    void cart.addProduct(product, orderQuantity).then((added) => {
+      if (added)
+        router.push(product.source === "remote" ? "/cart" : "/checkout")
+    })
   }
 
   return (
-    <section className="bg-[#F5F5F5] py-10 sm:py-14 lg:py-16">
-      <div className="mx-auto w-full max-w-[1400px] px-4 lg:px-6 xl:px-0">
-        <div className="min-h-[664px] overflow-hidden rounded-sm border border-[#F5F5F5] bg-white p-5 shadow-[0_8px_40px_rgba(0,0,0,0.12)] sm:p-8 xl:p-10">
-          <div className="grid gap-10 xl:grid-cols-[minmax(0,616px)_minmax(0,648px)] xl:gap-14">
+    <section className="bg-[#f7f9f5] py-10 sm:py-14 lg:py-16">
+      <div className="site-container">
+        <div className="min-h-[664px] overflow-hidden rounded-2xl border border-[#e3eae3] bg-white p-5 sm:p-8 xl:p-10">
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
             <ProductGallery
               productName={product.name}
               images={images}
@@ -182,11 +191,11 @@ export default function ProductDetails({ slug }: { slug: string }) {
 
             <div className="flex min-w-0 flex-col gap-6 xl:max-w-[648px]">
               <div className="flex flex-col gap-2">
-                <h1 className="font-public-sans text-xl leading-7 font-normal text-[#252B37]">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-[#183c2c] sm:text-3xl">
                   {product.name}
                 </h1>
 
-                <p className="font-geist text-sm leading-5 font-normal text-[#717680]">
+                <p className="font-geist text-sm leading-5 font-normal text-[#5e6f63]">
                   {product.description}
                 </p>
               </div>
@@ -196,15 +205,15 @@ export default function ProductDetails({ slug }: { slug: string }) {
                   <p>
                     <span className="font-normal">SKU: </span>
 
-                    <span className="font-semibold text-[#252B37]">
-                      {product.id.toUpperCase()}
+                    <span className="font-semibold [overflow-wrap:anywhere] text-[#252B37]">
+                      {product.sku ?? product.id.toUpperCase()}
                     </span>
                   </p>
 
                   <p>
                     <span className="font-normal">Category: </span>
 
-                    <span className="font-semibold text-[#252B37]">
+                    <span className="font-semibold [overflow-wrap:anywhere] text-[#252B37]">
                       {product.category.name}
                     </span>
                   </p>
@@ -214,15 +223,23 @@ export default function ProductDetails({ slug }: { slug: string }) {
                   <p>
                     <span className="font-normal">Availability: </span>
 
-                    <span className="font-semibold text-[#252B37]">
-                      {product.stock.toLocaleString("en-NG")} in stock
+                    <span className="font-semibold [overflow-wrap:anywhere] text-[#252B37]">
+                      {product.stockKnown === false
+                        ? available
+                          ? "In stock"
+                          : "Out of stock"
+                        : `${product.stock.toLocaleString("en-NG")} in stock`}
                     </span>
 
-                    <span className="mx-2">|</span>
+                    {product.soldCount !== undefined && (
+                      <>
+                        <span className="mx-2">|</span>
 
-                    <span className="font-semibold text-[#252B37]">
-                      {(product.soldCount ?? 0).toLocaleString("en-NG")} sold
-                    </span>
+                        <span className="font-semibold [overflow-wrap:anywhere] text-[#252B37]">
+                          {product.soldCount.toLocaleString("en-NG")} sold
+                        </span>
+                      </>
+                    )}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3">
@@ -232,7 +249,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
                       type="button"
                       onClick={copyProductLink}
                       aria-label="Copy product link"
-                      className="hover:text-primary cursor-pointer text-[#717680] transition-colors"
+                      className="hover:text-primary grid size-11 cursor-pointer place-items-center rounded-lg text-[#5e6f63] transition-colors"
                     >
                       <Copy aria-hidden className="size-4" />
                     </button>
@@ -263,23 +280,53 @@ export default function ProductDetails({ slug }: { slug: string }) {
 
               <div className="border-t border-[#F5F5F5]" />
 
-              <div className="flex items-center justify-between gap-5">
-                <p className="font-geist flex items-baseline font-semibold text-[#0A7145]">
-                  <span className="mr-1 text-sm leading-5">NGN</span>
+              <div className="flex flex-wrap items-center justify-between gap-5">
+                <ProductPrice
+                  price={product.price}
+                  compareAtPrice={product.compareAtPrice}
+                  currency={product.currency}
+                  large
+                />
 
-                  <span className="text-xl leading-[30px]">
-                    {formatPrice(product.price)}
-                  </span>
-                </p>
-
-                <ProductRating rating={rating} />
+                {(product.reviewCount ?? 0) > 0 && (
+                  <ProductRating rating={rating} />
+                )}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-[164px_minmax(0,326px)_126px]">
+              {baseProduct.variants && (
+                <label className="text-sm font-medium">
+                  Product option
+                  <select
+                    className="form-input mt-2"
+                    value={variant?.id ?? ""}
+                    onChange={(event) => {
+                      setVariantId(event.target.value)
+                      setQuantity(
+                        baseProduct.variants?.find(
+                          (v) => v.id === event.target.value
+                        )?.minimumOrderQuantity ?? 1
+                      )
+                    }}
+                  >
+                    {baseProduct.variants.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} — {v.saleUnit}, {v.unitsPerPack} per pack
+                        {v.inStock ? "" : " (out of stock)"}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-2 block text-xs font-normal text-[#5e6f63]">
+                    Quantity counts {product.saleUnit} packs. Minimum order:{" "}
+                    {minimum}. Prices include tax.
+                  </span>
+                </label>
+              )}
+              <div className="flex flex-wrap gap-3">
                 <QuantitySelector
-                  quantity={quantity}
+                  quantity={orderQuantity}
                   available={available}
-                  maximum={product.stock}
+                  maximum={productMaximum(product)}
+                  minimum={minimum}
                   onDecrease={decreaseQuantity}
                   onIncrease={increaseQuantity}
                 />
@@ -287,8 +334,8 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 <Button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={!available}
-                  className="h-12 rounded-lg border border-[#058A51] bg-[#058A51] px-5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#027A48]"
+                  disabled={!available || cart.isUpdating}
+                  className="border-primary bg-primary h-12 min-w-40 flex-1 rounded-lg border px-5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#027A48]"
                 >
                   <ShoppingCart aria-hidden className="size-5" />
 
@@ -298,8 +345,8 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 <Button
                   type="button"
                   onClick={handleBuyNow}
-                  disabled={!available}
-                  className="h-12 rounded-lg border border-[#D7FFEE] bg-[#D7FFEE] px-5 text-sm font-semibold text-[#027A48] shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#C4F9E1]"
+                  disabled={!available || cart.isUpdating}
+                  className="h-12 min-w-32 flex-1 rounded-lg border border-[#D7FFEE] bg-[#D7FFEE] px-5 text-sm font-semibold text-[#027A48] shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#C4F9E1]"
                 >
                   Buy now
                 </Button>
@@ -309,7 +356,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 type="button"
                 onClick={() => wishlist.toggleProduct(product)}
                 aria-pressed={isWishlisted}
-                className="hover:text-primary flex h-6 w-fit cursor-pointer items-center gap-2 rounded-lg text-base leading-6 font-semibold text-[#535862] transition-colors"
+                className="hover:text-primary flex min-h-11 w-fit cursor-pointer items-center gap-2 rounded-lg text-base leading-6 font-semibold text-[#535862] transition-colors"
               >
                 <Heart
                   aria-hidden
@@ -322,31 +369,60 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 {isWishlisted ? "Remove from Wishlist" : "Add to Wishlist"}
               </button>
 
-              <div className="flex min-h-22.5 flex-col gap-3 rounded-[3px] border border-[#F5F5F5] bg-white p-5">
-                <p className="font-geist text-sm leading-5 font-normal text-[#191C1F]">
-                  100% Guarantee Safe Checkout
-                </p>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {paymentMethods.map((method) => (
-                    <div
-                      key={method.name}
-                      className="relative size-11 overflow-hidden bg-white"
-                    >
-                      <Image
-                        src={method.image}
-                        alt={method.name}
-                        fill
-                        sizes="44px"
-                        className="object-contain p-0.5"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <p className="rounded-xl bg-[#f6f9f3] p-4 text-sm leading-6 text-[#5e6f63]">
+                Review your items and quantities in your bag before checkout.
+              </p>
             </div>
           </div>
         </div>
+        {product.specifications && product.specifications.length > 0 && (
+          <div className="mt-6 rounded-xl bg-white p-5">
+            <h2 className="text-lg font-semibold">Specifications</h2>
+            <dl className="mt-4 divide-y">
+              {product.specifications.map((s, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-2 gap-4 py-3 text-sm"
+                >
+                  <dt>{s.name}</dt>
+                  <dd>
+                    {s.value} {s.unit}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+        {product.detail && (
+          <div className="mt-6 rounded-xl bg-white p-5">
+            <h2 className="text-lg font-semibold">Product information</h2>
+            <dl className="mt-4 space-y-3">
+              {Object.entries(product.detail)
+                .filter(([, value]) => value !== null)
+                .map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-sm font-medium capitalize">
+                      {key === "shelflife"
+                        ? "Shelf life (days)"
+                        : key === "warranty"
+                          ? "Warranty (months)"
+                          : key === "dispatch"
+                            ? "Dispatch (days)"
+                            : key}
+                    </dt>
+                    <dd className="mt-1 text-sm whitespace-pre-wrap text-[#535862]">
+                      {typeof value === "boolean"
+                        ? value
+                          ? "Yes"
+                          : "No"
+                        : String(value)}
+                    </dd>
+                  </div>
+                ))}
+            </dl>
+          </div>
+        )}
+        {product.source === "remote" && <ProductReviews product={product.id} />}
       </div>
     </section>
   )
@@ -374,9 +450,10 @@ function ProductGallery({
   const hasMultipleImages = images.length > 1
 
   return (
-    <div className="flex min-w-0 flex-col gap-6 xl:w-[616px]">
-      <div className="relative h-[360px] overflow-hidden rounded-sm border border-[#F5F5F5] bg-white sm:h-[464px]">
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="relative aspect-square max-h-[464px] overflow-hidden rounded-xl border border-[#F5F5F5] bg-white">
         <Image
+          unoptimized
           src={selectedImage}
           alt={productName}
           fill
@@ -386,58 +463,61 @@ function ProductGallery({
         />
       </div>
 
-      <div className="relative h-24">
-        {hasMultipleImages ? (
-          <button
-            type="button"
-            onClick={onPrevious}
-            aria-label="Previous product image"
-            className="absolute top-1/2 -left-5 z-10 grid size-12 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-2 border-white bg-[#027A48] p-3 text-white shadow-lg transition hover:bg-[#05603A]"
-          >
-            <ArrowLeft aria-hidden className="size-6" />
-          </button>
-        ) : null}
+      {hasMultipleImages && (
+        <div className="relative h-24">
+          {hasMultipleImages ? (
+            <button
+              type="button"
+              onClick={onPrevious}
+              aria-label="Previous product image"
+              className="absolute top-1/2 -left-5 z-10 grid size-12 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-2 border-white bg-[#027A48] p-3 text-white shadow-lg transition hover:bg-[#05603A]"
+            >
+              <ArrowLeft aria-hidden className="size-6" />
+            </button>
+          ) : null}
 
-        <div className="grid h-24 [scrollbar-width:none] auto-cols-24 grid-flow-col gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-          {images.map((image, index) => {
-            const active = selectedImageIndex === index
+          <div className="grid h-24 [scrollbar-width:none] auto-cols-24 grid-flow-col gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+            {images.map((image, index) => {
+              const active = selectedImageIndex === index
 
-            return (
-              <button
-                key={`${image}-${index}`}
-                type="button"
-                onClick={() => onSelectImage(index)}
-                aria-label={`View product image ${index + 1}`}
-                aria-pressed={active}
-                className={`relative size-24 overflow-hidden rounded-xs bg-white transition ${
-                  active
-                    ? "border-2 border-[#027A48]"
-                    : "border border-[#F5F5F5]"
-                }`}
-              >
-                <Image
-                  src={image}
-                  alt={`${productName} image ${index + 1}`}
-                  fill
-                  sizes="96px"
-                  className="object-contain p-2"
-                />
-              </button>
-            )
-          })}
+              return (
+                <button
+                  key={`${image}-${index}`}
+                  type="button"
+                  onClick={() => onSelectImage(index)}
+                  aria-label={`View product image ${index + 1}`}
+                  aria-pressed={active}
+                  className={`relative size-24 overflow-hidden rounded-xs bg-white transition ${
+                    active
+                      ? "border-2 border-[#027A48]"
+                      : "border border-[#F5F5F5]"
+                  }`}
+                >
+                  <Image
+                    unoptimized
+                    src={image}
+                    alt={`${productName} image ${index + 1}`}
+                    fill
+                    sizes="96px"
+                    className="object-contain p-2"
+                  />
+                </button>
+              )
+            })}
+          </div>
+
+          {hasMultipleImages ? (
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label="Next product image"
+              className="absolute top-1/2 -right-5 z-10 grid size-12 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-2 border-white bg-[#027A48] p-3 text-white shadow-lg transition hover:bg-[#05603A]"
+            >
+              <ArrowRight aria-hidden className="size-6" />
+            </button>
+          ) : null}
         </div>
-
-        {hasMultipleImages ? (
-          <button
-            type="button"
-            onClick={onNext}
-            aria-label="Next product image"
-            className="absolute top-1/2 -right-5 z-10 grid size-12 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-2 border-white bg-[#027A48] p-3 text-white shadow-lg transition hover:bg-[#05603A]"
-          >
-            <ArrowRight aria-hidden className="size-6" />
-          </button>
-        ) : null}
-      </div>
+      )}
     </div>
   )
 }
@@ -445,6 +525,7 @@ function ProductGallery({
 type QuantitySelectorProps = {
   quantity: number
   available: boolean
+  minimum: number
   maximum: number
   onDecrease: () => void
   onIncrease: () => void
@@ -453,24 +534,25 @@ type QuantitySelectorProps = {
 function QuantitySelector({
   quantity,
   available,
+  minimum,
   maximum,
   onDecrease,
   onIncrease,
 }: QuantitySelectorProps) {
   return (
-    <div className="flex h-12 items-center justify-between rounded-[3px] border-2 border-[#F5F5F5] bg-white px-5">
+    <div className="flex h-12 w-40 shrink-0 items-center justify-between rounded-xl border border-[#c9dfcc] bg-[#eff7f0] px-1">
       <button
         type="button"
         onClick={onDecrease}
-        disabled={quantity <= 1}
+        disabled={quantity <= minimum}
         aria-label="Decrease quantity"
-        className="grid cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
+        className="grid size-11 cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
       >
         <Minus aria-hidden className="size-4" strokeWidth={2} />
       </button>
 
       <span className="font-geist text-center text-base leading-6 font-medium text-[#414651]">
-        {String(quantity).padStart(2, "0")}
+        {quantity}
       </span>
 
       <button
@@ -478,7 +560,7 @@ function QuantitySelector({
         onClick={onIncrease}
         disabled={!available || quantity >= maximum}
         aria-label="Increase quantity"
-        className="grid cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
+        className="grid size-11 cursor-pointer place-items-center text-[#181D27] disabled:cursor-not-allowed disabled:opacity-35"
       >
         <Plus aria-hidden className="size-4" strokeWidth={2} />
       </button>
@@ -489,6 +571,7 @@ function QuantitySelector({
 function ProductRating({ rating }: { rating: number }) {
   return (
     <div
+      role="img"
       className="flex h-3 items-center gap-0.5"
       aria-label={`${rating} out of 5 stars`}
     >
@@ -526,47 +609,9 @@ function SocialButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="hover:text-primary cursor-pointer text-[#717680] transition-colors"
+      className="hover:text-primary grid size-11 cursor-pointer place-items-center rounded-lg text-[#5e6f63] transition-colors"
     >
       {children}
     </button>
-  )
-}
-
-function formatPrice(price: number) {
-  return new Intl.NumberFormat("en-NG", {
-    maximumFractionDigits: 0,
-  }).format(price)
-}
-
-function ProductDetailsSkeleton() {
-  return (
-    <section className="bg-[#F5F5F5] py-10 sm:py-14 lg:py-16">
-      <div className="mx-auto w-full max-w-[1400px] px-4 lg:px-6 xl:px-0">
-        <div className="grid min-h-[664px] gap-14 rounded-sm border border-[#F5F5F5] bg-white p-10 shadow-[0_8px_40px_rgba(0,0,0,0.12)] xl:grid-cols-[616px_648px]">
-          <div>
-            <div className="h-[464px] animate-pulse rounded-sm bg-[#F2F4F7]" />
-
-            <div className="mt-6 flex gap-2">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="size-24 animate-pulse rounded-sm bg-[#F2F4F7]"
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="h-7 w-3/4 animate-pulse rounded bg-[#F2F4F7]" />
-            <div className="h-16 animate-pulse rounded bg-[#F2F4F7]" />
-            <div className="h-14 animate-pulse rounded bg-[#F2F4F7]" />
-            <div className="h-12 w-1/3 animate-pulse rounded bg-[#F2F4F7]" />
-            <div className="h-12 animate-pulse rounded bg-[#F2F4F7]" />
-            <div className="h-24 animate-pulse rounded bg-[#F2F4F7]" />
-          </div>
-        </div>
-      </div>
-    </section>
   )
 }

@@ -1,136 +1,62 @@
 "use client"
-
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { toast } from "sonner"
-
-import type { Cart } from "@/features/cart/types/cart"
-import {
-  checkoutSchema,
-  type CheckoutFormSchema,
-} from "../../schemas/checkout-schema"
-import type { CheckoutCustomer } from "../../types/checkout"
-import { formatCurrency } from "@/features/products/utils/format-currency"
-
-export default function CheckoutPageContent({
-  initialCart,
-  customer,
-}: {
-  initialCart: Cart
-  customer: CheckoutCustomer
-}) {
-  const nameParts = customer.name.trim().split(/\s+/)
-
-  const form = useForm<CheckoutFormSchema>({
-    resolver: zodResolver(checkoutSchema),
-    defaultValues: {
-      firstName: nameParts[0] ?? "",
-      lastName: nameParts.slice(1).join(" "),
-      email: customer.email,
-      phone: customer.phone ?? "",
-      addressLineOne: "",
-      addressLineTwo: "",
-      city: "",
-      state: "",
-      deliveryNote: "",
-      paymentMethod: "card",
-    },
-  })
-
-  async function submitCheckout(values: CheckoutFormSchema) {
-    console.log(values)
-    toast.success("Checkout details submitted successfully")
-  }
-
+import Link from "next/link"
+import { LockKeyhole } from "lucide-react"
+import AuthBoundary from "@/features/auth/components/auth-boundary"
+import { useCart } from "@/features/cart/hooks/use-cart"
+import { CartSkeleton } from "@/components/shared/loading-skeletons"
+import ContentError from "@/components/shared/content-error"
+import EmptyCart from "@/features/cart/components/store/empty-cart"
+export default function CheckoutPageContent() {
   return (
-    <section className="bg-[#f7f7f7] py-12">
-      <div className="site-container">
-        <h1 className="text-3xl font-extrabold">Checkout</h1>
-
-        <form
-          onSubmit={form.handleSubmit(submitCheckout)}
-          className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]"
-        >
-          <div className="rounded-xl bg-white p-6 sm:p-8">
-            <h2 className="text-lg font-bold">Delivery information</h2>
-
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <input
-                {...form.register("firstName")}
-                placeholder="First name"
-                className="form-input"
-              />
-              <input
-                {...form.register("lastName")}
-                placeholder="Last name"
-                className="form-input"
-              />
-              <input
-                type="email"
-                {...form.register("email")}
-                placeholder="Email address"
-                className="form-input"
-              />
-              <input
-                {...form.register("phone")}
-                placeholder="Phone number"
-                className="form-input"
-              />
-              <input
-                {...form.register("addressLineOne")}
-                placeholder="Address"
-                className="form-input sm:col-span-2"
-              />
-              <input
-                {...form.register("city")}
-                placeholder="City"
-                className="form-input"
-              />
-              <input
-                {...form.register("state")}
-                placeholder="State"
-                className="form-input"
-              />
-            </div>
-          </div>
-
-          <aside className="h-fit rounded-xl bg-white p-6">
-            <h2 className="text-lg font-bold">Order summary</h2>
-
-            <div className="mt-5 grid gap-4">
-              {initialCart.items.map((item) => (
-                <div
-                  key={item.productId}
-                  className="flex justify-between gap-4 text-sm"
-                >
-                  <span className="text-black/55">
-                    {item.product.name} × {item.quantity}
-                  </span>
-
-                  <strong>
-                    {formatCurrency(item.product.price * item.quantity)}
-                  </strong>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 flex justify-between border-t border-black/10 pt-5">
-              <strong>Total</strong>
-              <strong className="text-xl">
-                {formatCurrency(initialCart.total)}
-              </strong>
-            </div>
-
-            <button
-              type="submit"
-              disabled={form.formState.isSubmitting}
-              className="bg-primary mt-6 flex h-12 w-full items-center justify-center rounded-md text-sm font-bold text-white disabled:opacity-50"
-            >
-              Place order
-            </button>
-          </aside>
-        </form>
+    <AuthBoundary roles={["customer"]}>
+      <CheckoutStatus />
+    </AuthBoundary>
+  )
+}
+function CheckoutStatus() {
+  const state = useCart()
+  if (state.isPending) return <CartSkeleton />
+  if (state.isError)
+    return (
+      <div className="site-container py-12">
+        <ContentError
+          title="Your bag is temporarily unavailable"
+          onRetry={() => void state.refetch()}
+        />
       </div>
-    </section>
+    )
+  if (!state.cart.items.length)
+    return (
+      <div className="site-container py-12">
+        <EmptyCart />
+      </div>
+    )
+  return (
+    <div className="site-container py-12">
+      <div className="mx-auto max-w-xl rounded-3xl border bg-white p-8 text-center">
+        <LockKeyhole className="text-primary mx-auto size-10" />
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight">
+          Your bag is safely saved
+        </h1>
+        <p className="text-muted-foreground mt-3 text-sm leading-6">
+          Checkout is temporarily unavailable. You can keep managing your bag or
+          contact us for help with your order.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Link
+            className="bg-primary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold text-white"
+            href="/cart"
+          >
+            Back to your bag
+          </Link>
+          <Link
+            className="inline-flex min-h-11 items-center rounded-xl border px-5 text-sm"
+            href="/contact"
+          >
+            Contact us
+          </Link>
+        </div>
+      </div>
+    </div>
   )
 }

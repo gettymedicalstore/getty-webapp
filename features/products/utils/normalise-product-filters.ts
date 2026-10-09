@@ -1,6 +1,8 @@
 import type { ProductFilters, ProductSort } from "../types/product"
 
 export type ProductSearchParams = {
+  cursor?: string | string[]
+  navigation?: string | string[]
   page?: string | string[]
   limit?: string | string[]
   search?: string | string[]
@@ -79,6 +81,14 @@ export function normaliseProductFilters(
   const maximumPrice = nonNegativeNumber(searchParams.maximumPrice)
 
   return {
+    cursor:
+      searchParams.cursor === undefined
+        ? undefined
+        : Number(getSingleSearchValue(searchParams.cursor)),
+    navigation:
+      getSingleSearchValue(searchParams.navigation) === "previous"
+        ? "previous"
+        : "next",
     page: positiveInteger(searchParams.page, 1),
 
     limit: Math.min(positiveInteger(searchParams.limit, 12), 48),

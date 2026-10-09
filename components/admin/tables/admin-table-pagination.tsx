@@ -29,7 +29,7 @@ export default function AdminTablePagination({
   const last = Math.min((page + 1) * pageSize, total)
 
   return (
-    <div className="flex flex-col justify-between gap-3 border-t p-4 text-sm sm:flex-row sm:items-center">
+    <div className="flex flex-col justify-between gap-3 px-5 py-4 text-xs xl:flex-row xl:items-center">
       <p className="text-muted-foreground">
         Showing {first}–{last} of {total}
       </p>
@@ -38,8 +38,9 @@ export default function AdminTablePagination({
         {onPageSizeChange && (
           <select
             value={pageSize}
+            aria-label="Rows per page"
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            className="bg-background h-9 rounded-md border px-2 text-sm"
+            className="h-11 rounded-lg border border-[#e5e9e6] bg-white px-2 text-xs"
           >
             {[10, 20, 50, 100].map((size) => (
               <option key={size} value={size}>
@@ -49,7 +50,7 @@ export default function AdminTablePagination({
           </select>
         )}
 
-        <span className="text-muted-foreground px-2">
+        <span className="text-muted-foreground px-1">
           Page {currentPage} of {Math.max(pageCount, 1)}
         </span>
 
@@ -106,7 +107,7 @@ function PaginationButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="grid size-9 place-items-center rounded-md border disabled:cursor-not-allowed disabled:opacity-40"
+      className="grid size-11 place-items-center rounded-lg border border-[#e5e9e6] text-[#586d5e] transition hover:bg-[#f3f7f3] disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>

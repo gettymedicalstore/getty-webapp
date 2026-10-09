@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, Quote } from "lucide-react"
+import { ArrowLeft, ArrowRight } from "lucide-react"
 import { useRef } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -61,7 +61,7 @@ export default function Testimonials() {
       <div className="mx-auto w-full max-w-330 px-4 lg:px-6 xl:px-0">
         <div className="flex items-center justify-between gap-6">
           <h2 className="font-geist text-2xl leading-[110%] font-semibold text-[#252B37] sm:text-[32px]">
-            What Client Says About Us
+            What our customers say
           </h2>
 
           <div className="flex shrink-0 items-center gap-3">
@@ -87,6 +87,9 @@ export default function Testimonials() {
 
         <div
           ref={railRef}
+          tabIndex={0}
+          role="region"
+          aria-label="Customer testimonials"
           className="mt-9 grid snap-x snap-mandatory scrollbar-none auto-cols-[92%] grid-flow-col gap-4 overflow-x-auto scroll-smooth pb-2 sm:auto-cols-[75%] lg:auto-cols-[calc((100%-16px)/2)] [&::-webkit-scrollbar]:hidden"
         >
           {testimonials.map((testimonial) => (
@@ -95,7 +98,7 @@ export default function Testimonials() {
               data-testimonial-card
               className="relative min-h-63.5 min-w-0 snap-start overflow-hidden rounded-xl bg-[#FDFDFD] px-6 py-8 shadow-[0px_8px_40px_0px_#27234314] sm:px-8"
             >
-              <div className="pl-6 shadow-[2px_0px_0px_0px_#029FAE_inset]">
+              <div className="border-l-2 border-[#87a976] pl-6">
                 <p className="font-geist text-base leading-[150%] font-normal text-[#344054] md:text-xl">
                   {testimonial.message}
                 </p>
@@ -119,7 +122,7 @@ export default function Testimonials() {
                     {testimonial.name}
                   </p>
 
-                  <p className="text-sm leading-[140%] text-[#717680] capitalize">
+                  <p className="text-sm leading-[140%] text-[#5e6f63] capitalize">
                     {testimonial.role}
                   </p>
                 </div>

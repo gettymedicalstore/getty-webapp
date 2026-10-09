@@ -1,11 +1,9 @@
 import type { ContactFormValues } from "../schemas/contact-schema"
+import { unavailable } from "@/lib/api/client"
 
-export async function submitContactMessage(values: ContactFormValues) {
-  await new Promise((resolve) => setTimeout(resolve, 600))
-
-  return {
-    success: true,
-    reference: `GMS-CONTACT-${Date.now()}`,
-    values,
-  }
+export async function submitContactMessage(_values: ContactFormValues) {
+  void _values
+  return unavailable(
+    "Online enquiries are temporarily unavailable. Please use the contact details on this page."
+  )
 }
