@@ -1,16 +1,37 @@
 import { z } from "zod"
 
-export const checkoutSchema = z.object({
-  firstName: z.string().trim().min(2),
-  lastName: z.string().trim().min(2),
-  email: z.string().trim().email(),
-  phone: z.string().trim().min(10),
-  addressLineOne: z.string().trim().min(5),
-  addressLineTwo: z.string().trim().optional(),
-  city: z.string().trim().min(2),
-  state: z.string().trim().min(2),
-  deliveryNote: z.string().trim().max(500).optional(),
-  paymentMethod: z.literal("card"),
-})
+const text = (name: string, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1, `Enter ${name}.`)
+    .max(max, `Use ${max} characters or fewer.`)
 
-export type CheckoutFormSchema = z.infer<typeof checkoutSchema>
+export const deliverySchema = z.object({
+  name: text("the recipient's name", 120),
+  phone: text("a phone number", 30),
+  address: text("the delivery address", 300),
+  city: text("a city", 100),
+  state: text("a state", 100),
+  country: z
+    .string()
+    .trim()
+    .regex(/^[a-zA-Z]{2}$/, "Enter a two-letter country code.")
+    .transform((v) => v.toUpperCase()),
+  postcode: z
+    .string()
+    .trim()
+    .max(20)
+    .nullable()
+    .optional()
+    .transform((v) => v || null),
+})
+export const checkoutSchema = deliverySchema.extend({
+  notes: z
+    .string()
+    .trim()
+    .max(1000, "Use 1,000 characters or fewer.")
+    .optional(),
+})
+export type Delivery = z.output<typeof deliverySchema>
+export type CheckoutFormSchema = z.output<typeof checkoutSchema>

@@ -40,17 +40,8 @@ function readReference(response: unknown) {
   return parsed.data
 }
 
-export async function requestPasswordResetOtp(
-  input: RequestPasswordResetOtpInput
-): Promise<RequestPasswordResetOtpResponse> {
-  const { email } = requestPasswordResetOtpSchema.parse(input)
-  const reference = readReference(
-    await apiRequest(
-      `/getty/account/v1/password/reset/${encodeURIComponent(email)}`,
-      { method: "POST" },
-      "public"
-    )
-  )
+function recoveryChallenge(response: unknown): RequestPasswordResetOtpResponse {
+  const reference = readReference(response)
   const expiresAt =
     "expiresAt" in reference && reference.expiresAt
       ? Date.parse(reference.expiresAt)
@@ -60,6 +51,30 @@ export async function requestPasswordResetOtp(
     expiresAt,
     resendAt: expiresAt ?? Date.now() + 5 * 60_000,
   }
+}
+
+export async function requestPasswordResetOtp(
+  input: RequestPasswordResetOtpInput
+): Promise<RequestPasswordResetOtpResponse> {
+  const { email } = requestPasswordResetOtpSchema.parse(input)
+  return recoveryChallenge(
+    await apiRequest(
+      `/getty/account/v1/password/reset/${encodeURIComponent(email)}`,
+      { method: "POST" },
+      "public"
+    )
+  )
+}
+
+export async function resendPasswordResetOtp(input: { reference: string }) {
+  const reference = GettyIdSchema.parse(input.reference)
+  return recoveryChallenge(
+    await apiRequest(
+      "/getty/account/v1/password/reset/resend",
+      { method: "POST", body: JSON.stringify({ reference }) },
+      "public"
+    )
+  )
 }
 
 export async function verifyPasswordResetOtp(

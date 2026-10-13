@@ -9,6 +9,7 @@ import {
   ProductDetailResponseSchema,
   CategoriesResponseSchema,
   PhotoPageResponseSchema,
+  RatingPageResponseSchema,
   type CatalogProduct,
 } from "@/lib/api/getty-contract"
 import type {
@@ -17,6 +18,7 @@ import type {
   ProductListResponse,
 } from "../types/product"
 import type { Category } from "@/features/categories/types/category"
+import { catalogPricing } from "../utils/product-pricing"
 const placeholder = "/images/product-placeholder.svg"
 export const publicSlug = (name: string, id: string) =>
   `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${id}`
@@ -24,7 +26,7 @@ export async function getProductThumbnail(id: string): Promise<string | null> {
   GettyIdSchema.parse(id)
   const result = PhotoPageResponseSchema.safeParse(
     await backendRequest(
-      `/getty/ecommerce/catalog/products/${id}/photos?limit=1`,
+      `/getty/ecommerce/catalog/products/${id}/photos?limit=1&showAll=false`,
       {},
       "public"
     )
@@ -33,7 +35,9 @@ export async function getProductThumbnail(id: string): Promise<string | null> {
     throw new BackendError("The product photos response is incomplete.")
   const photo = result.data.data.records[0]
   return photo
-    ? gettyUrl(`/getty/ecommerce/catalog/products/${id}/photos/${photo.id}/src`)
+    ? gettyUrl(
+        `/getty/ecommerce/catalog/products/${id}/photos/${photo.id}/src?showAll=false`
+      )
     : null
 }
 function mapProduct(p: CatalogProduct): Product {
@@ -44,7 +48,7 @@ function mapProduct(p: CatalogProduct): Product {
     brand: p.brand ?? undefined,
     slug: publicSlug(p.name, p.id),
     description: p.description ?? "",
-    price: p.price,
+    ...catalogPricing(p.price, p.discount),
     currency: p.currency,
     category: { ...category, slug: publicSlug(category.name, category.id) },
     image: placeholder,
@@ -101,6 +105,7 @@ export async function getLiveProducts(
     currency: "NGN",
     cursor: String(filters.cursor ?? 0),
     navigation: filters.navigation ?? "next",
+    showAll: "false",
   })
   if (!Number.isSafeInteger(filters.cursor ?? 0) || (filters.cursor ?? 0) < 0)
     throw new BackendError("Invalid catalogue cursor.", 400)
@@ -147,7 +152,7 @@ export async function getLiveProduct(slug: string): Promise<Product | null> {
   try {
     const result = ProductDetailResponseSchema.safeParse(
       await backendRequest(
-        `/getty/ecommerce/catalog/products/${id}`,
+        `/getty/ecommerce/catalog/products/${id}?showAll=false`,
         {},
         "public"
       )
@@ -157,7 +162,7 @@ export async function getLiveProduct(slug: string): Promise<Product | null> {
     const p = result.data.data
     const photos = PhotoPageResponseSchema.safeParse(
       await backendRequest(
-        `/getty/ecommerce/catalog/products/${id}/photos?limit=100`,
+        `/getty/ecommerce/catalog/products/${id}/photos?limit=100&showAll=false`,
         {},
         "public"
       )
@@ -165,7 +170,9 @@ export async function getLiveProduct(slug: string): Promise<Product | null> {
     if (!photos.success)
       throw new BackendError("The product photos response is incomplete.")
     const images = photos.data.data.records.map((photo) =>
-      gettyUrl(`/getty/ecommerce/catalog/products/${id}/photos/${photo.id}/src`)
+      gettyUrl(
+        `/getty/ecommerce/catalog/products/${id}/photos/${photo.id}/src?showAll=false`
+      )
     )
     return {
       ...mapProduct(p),
@@ -179,4 +186,27 @@ export async function getLiveProduct(slug: string): Promise<Product | null> {
     if (error instanceof BackendError && error.status === 404) return null
     throw error
   }
+}
+
+export async function getProductReviews(
+  product: string,
+  page: { cursor: number; navigation: "next" | "previous" }
+) {
+  GettyIdSchema.parse(product)
+  const query = new URLSearchParams({
+    cursor: String(page.cursor),
+    navigation: page.navigation,
+    limit: "20",
+    showAll: "false",
+  })
+  const result = RatingPageResponseSchema.safeParse(
+    await backendRequest(
+      `/getty/ecommerce/catalog/products/${product}/ratings?${query}`,
+      {},
+      "public"
+    )
+  )
+  if (!result.success)
+    throw new BackendError("The product reviews response is incomplete.")
+  return result.data.data
 }

@@ -15,7 +15,7 @@ export default function ProductCardImage({
   sizes = "(max-width:640px) 45vw,(max-width:1024px) 30vw,280px",
   eager = false,
 }: {
-  product: Product
+  product: Pick<Product, "id" | "name" | "image" | "source">
   className?: string
   sizes?: string
   eager?: boolean

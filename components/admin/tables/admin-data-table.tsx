@@ -28,6 +28,7 @@ type AdminDataTableProps<TData> = {
   emptyState?: ReactNode
   toolbar?: ReactNode
   label?: string
+  paginationControls?: ReactNode
 }
 
 export default function AdminDataTable<TData>({
@@ -43,6 +44,7 @@ export default function AdminDataTable<TData>({
   emptyState,
   toolbar,
   label = "Records",
+  paginationControls,
 }: AdminDataTableProps<TData>) {
   const table = useReactTable({
     data,
@@ -168,26 +170,27 @@ export default function AdminDataTable<TData>({
         </table>
       </div>
 
-      {total > 0 && (
-        <AdminTablePagination
-          page={pagination.pageIndex}
-          pageSize={pagination.pageSize}
-          pageCount={pageCount}
-          total={total}
-          onPageChange={(pageIndex) => {
-            onPaginationChange((current) => ({
-              ...current,
-              pageIndex,
-            }))
-          }}
-          onPageSizeChange={(pageSize) => {
-            onPaginationChange({
-              pageIndex: 0,
-              pageSize,
-            })
-          }}
-        />
-      )}
+      {paginationControls ??
+        (total > 0 && (
+          <AdminTablePagination
+            page={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            pageCount={pageCount}
+            total={total}
+            onPageChange={(pageIndex) => {
+              onPaginationChange((current) => ({
+                ...current,
+                pageIndex,
+              }))
+            }}
+            onPageSizeChange={(pageSize) => {
+              onPaginationChange({
+                pageIndex: 0,
+                pageSize,
+              })
+            }}
+          />
+        ))}
     </div>
   )
 }

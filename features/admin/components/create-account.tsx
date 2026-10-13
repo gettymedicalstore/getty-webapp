@@ -2,16 +2,17 @@
 import {
   ValidatedForm,
   FormInput,
-  FormSelect,
 } from "@/components/shared/form/validated-form"
 import { accountFormSchema } from "@/lib/form-schemas"
 
 import { useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { CircleAlert, CircleCheck, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { createTenantAccount } from "../api/accounts"
+import { getProfileRoles } from "../api/team-profiles"
+import ProfileRoleField from "./profile-role-field"
 import {
   Dialog,
   DialogContent,
@@ -32,12 +33,18 @@ export default function CreateAccount({
       name: string
       email: string
     } | null>(null)
+  const roles = useQuery({
+    queryKey: ["portal", "profile-roles"],
+    queryFn: getProfileRoles,
+    enabled: open && kind === "profile",
+    staleTime: 5 * 60 * 1000,
+  })
   async function submit(fields: {
     name: string
     email: string
     [key: string]: unknown
   }) {
-    if (busy) return
+    if (busy || (kind === "profile" && !roles.data)) return
     setBusy(true)
     setError("")
     try {
@@ -94,7 +101,7 @@ export default function CreateAccount({
                 <DialogDescription>
                   {kind === "vendor"
                     ? "The vendor account is ready to manage from your workspace."
-                    : "The team profile is ready to manage from your workspace."}
+                    : "The team profile is ready. Login credentials will be sent to their email."}
                 </DialogDescription>
               </div>
               <div className="rounded-xl border border-[#e1e9e3] bg-[#f7faf7] px-4 py-3.5">
@@ -163,31 +170,7 @@ export default function CreateAccount({
                     />
                   </label>
                 ))}
-                {kind === "profile" && (
-                  <label className="block text-sm font-medium">
-                    Role
-                    <FormSelect
-                      name="role"
-                      defaultValue="operations"
-                      className="form-input mt-2"
-                      disabled={busy}
-                    >
-                      {[
-                        "operations",
-                        "finance",
-                        "dispatcher",
-                        "driver",
-                        "vendor",
-                        "admin",
-                        "superadmin",
-                      ].map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </FormSelect>
-                  </label>
-                )}
+                {kind === "profile" && <ProfileRoleField disabled={busy} />}
                 {error && (
                   <p
                     role="alert"
@@ -209,7 +192,10 @@ export default function CreateAccount({
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={busy}>
+                  <Button
+                    type="submit"
+                    disabled={busy || (kind === "profile" && !roles.data)}
+                  >
                     {busy ? "Creating…" : "Create account"}
                   </Button>
                 </DialogFooter>

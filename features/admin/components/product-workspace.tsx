@@ -77,6 +77,7 @@ export default function ProductWorkspace({
         </Link>
         <ContentError
           title="We couldn’t load this product"
+          description={query.error.message || "Please try again in a moment."}
           onRetry={() => query.refetch()}
           retrying={query.isFetching}
         />
@@ -226,7 +227,10 @@ export default function ProductWorkspace({
           <ProductVariants product={productId} currency={currency} />
         )}
         {active.id === "specifications" && (
-          <ProductSpecifications product={productId} />
+          <ProductSpecifications
+            product={productId}
+            productName={product.name}
+          />
         )}
         {active.id === "taxes" && <ProductTaxAssignments product={productId} />}
         {active.id === "photos" && (

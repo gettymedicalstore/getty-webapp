@@ -9,14 +9,29 @@ import PageHeading from "@/components/shared/page-heading"
 import EmptyState from "@/components/shared/empty-state"
 import CustomerMetricCard from "@/components/customer/dashboard/customer-metric-card"
 import { formatCurrency } from "@/features/products/utils/format-currency"
-import { customerOrdersOptions } from "./orders"
+import {
+  defaultOrderFilters,
+  getOrders,
+} from "@/features/orders/api/order-management"
+import { useState } from "react"
 import CustomerOrders from "./orders"
 export default function CustomerDashboard() {
   const { data: session } = useAuthSession()
-  const orders = useQuery(customerOrdersOptions),
+  const [filters] = useState(defaultOrderFilters)
+  const orders = useQuery({
+      queryKey: [
+        "orders",
+        session?.user?.id,
+        "customer",
+        filters,
+        { cursor: 0, navigation: "next" },
+      ],
+      queryFn: () => getOrders("customer", filters),
+      enabled: Boolean(session?.user),
+    }),
     wishlist = useWishlist(),
     { cart, isPending: cartPending, isError: cartError } = useCart()
-  const records = orders.data?.orders ?? []
+  const records = orders.data?.items ?? []
   return (
     <div className="space-y-8">
       <PageHeading
@@ -33,21 +48,20 @@ export default function CustomerDashboard() {
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CustomerMetricCard
-          title="Total orders"
+          title="Orders this month"
           loading={orders.isPending}
-          value={orders.isError ? "—" : records.length}
+          value={orders.isError ? "—" : (orders.data?.records ?? "—")}
           icon={Package}
         />
         <CustomerMetricCard
-          title="Total paid"
+          title="Recent order value"
           loading={orders.isPending}
           value={
             orders.isError
               ? "—"
-              : formatCurrency(
-                  records.reduce((sum, o) => sum + o.paidAmountKobo / 100, 0)
-                )
+              : formatCurrency(records.reduce((sum, o) => sum + o.total, 0))
           }
+          description="Loaded orders; before refunds"
           icon={Wallet}
         />
         <CustomerMetricCard

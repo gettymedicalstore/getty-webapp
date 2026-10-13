@@ -19,7 +19,11 @@ export default function CartOrderSummary({ items }: { items: CartItem[] }) {
       (item) => item.purchasable === false || item.priceAvailable === false
     )
   const blocked =
-    state.isUpdating || state.syncError || unavailable || !items.length
+    state.isUpdating ||
+    state.syncError ||
+    state.isPending ||
+    unavailable ||
+    !items.length
   const subtotal = remote
     ? cart.subtotal
     : items.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
@@ -57,24 +61,7 @@ export default function CartOrderSummary({ items }: { items: CartItem[] }) {
           Update the unavailable items in your bag before continuing.
         </p>
       )}
-      {remote ? (
-        <>
-          <button
-            type="button"
-            disabled
-            className="mt-6 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#e5ebe0] px-4 text-sm font-semibold text-[#52614a]"
-          >
-            Checkout temporarily unavailable
-          </button>
-          <p className="text-muted-foreground mt-3 text-sm leading-6">
-            Your bag is saved to your account.{" "}
-            <Link href="/contact" className="text-primary underline">
-              Contact us
-            </Link>{" "}
-            for help with your order.
-          </p>
-        </>
-      ) : session.isPending ? (
+      {session.isPending ? (
         <Skeleton className="mt-6 h-12 w-full" />
       ) : session.isError ? (
         <p role="alert" className="mt-6 text-sm">

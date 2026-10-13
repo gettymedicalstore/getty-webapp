@@ -2,6 +2,7 @@
 import { useMutation } from "@tanstack/react-query"
 import {
   requestPasswordResetOtp,
+  resendPasswordResetOtp,
   verifyPasswordResetOtp,
   resetPassword,
 } from "../api/password-reset"
@@ -26,6 +27,9 @@ export function useVerifyPasswordResetOtp() {
     Error,
     VerifyPasswordResetOtpInput
   >({ mutationFn: verifyPasswordResetOtp })
+}
+export function useResendPasswordResetOtp() {
+  return useMutation({ mutationFn: resendPasswordResetOtp })
 }
 export function useResetPassword() {
   return useMutation<ResetPasswordResponse, Error, ResetPasswordInput>({

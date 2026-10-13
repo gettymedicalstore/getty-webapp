@@ -8,6 +8,7 @@ import {
   ClipboardList,
   UserRound,
   UsersRound,
+  Star,
   type LucideIcon,
 } from "lucide-react"
 
@@ -45,6 +46,9 @@ function productGroup(
         : []),
       { label: "Taxes", href: `${base}/taxes`, icon: BadgePercent },
       { label: "Products", href: `${base}/products`, icon: Package },
+      ...(base === "/admin"
+        ? [{ label: "All products", href: "/admin/all-products", icon: Boxes }]
+        : []),
       { label: "Inventory", href: `${base}/inventory`, icon: Boxes },
     ],
   }
@@ -61,6 +65,7 @@ export const workspaceMenus: Record<WorkspaceRole, WorkspaceItem[]> = {
     },
     { label: "Customers", href: "/admin/customers", icon: UsersRound },
     productGroup("/admin", true),
+    { label: "Featured products", href: "/admin/featured", icon: Star },
     { label: "Orders", href: "/admin/orders", icon: ClipboardList },
   ],
   customer: [
@@ -104,6 +109,10 @@ export function isWorkspaceLinkActive(item: WorkspaceLink, pathname: string) {
 }
 
 export function workspacePageTitle(role: WorkspaceRole, pathname: string) {
+  if (role === "admin" && pathname === "/admin/payments")
+    return "Payment recovery"
+  if (/^\/(admin|supplier|customer)\/orders\/[^/]+$/.test(pathname))
+    return "Order details"
   return (
     workspaceMenus[role]
       .flatMap((item) => ("children" in item ? item.children : [item]))

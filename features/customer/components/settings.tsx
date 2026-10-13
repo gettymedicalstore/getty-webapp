@@ -5,14 +5,8 @@ import { preferencesFormSchema } from "@/lib/form-schemas"
 
 import Link from "next/link"
 import { useState } from "react"
-import {
-  ArrowUpRight,
-  Bell,
-  KeyRound,
-  LifeBuoy,
-  ShieldCheck,
-} from "lucide-react"
-import CreateAccount from "@/features/admin/components/create-account"
+import { ArrowUpRight, Bell, KeyRound, LifeBuoy } from "lucide-react"
+import TeamProfiles from "@/features/admin/components/team-profiles"
 import ChangePasswordDialog from "@/features/auth/components/change-password-dialog"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { useDeviceStore } from "@/lib/use-device-store"
@@ -159,25 +153,7 @@ export default function Settings() {
         </div>
       </div>
 
-      {session?.user?.tenantType === "consumer" &&
-        ["admin", "superadmin"].includes(session.user.profileRole ?? "") && (
-          <section className="flex flex-col gap-4 rounded-2xl border border-[#dfe8e1] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#edf5ee] text-[#23824d]">
-                <ShieldCheck aria-hidden className="size-5" />
-              </span>
-              <div>
-                <h2 className="font-semibold text-[#2b4032]">
-                  Organisation team
-                </h2>
-                <p className="mt-1 text-sm text-[#5e6f63]">
-                  Invite someone to help manage your organisation.
-                </p>
-              </div>
-            </div>
-            <CreateAccount kind="profile" />
-          </section>
-        )}
+      <TeamProfiles />
     </div>
   )
 }

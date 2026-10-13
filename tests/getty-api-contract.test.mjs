@@ -544,6 +544,7 @@ test("public catalog omits credentials and forwards filters without invented inv
   })
   assert.equal(seen.pathname, "/getty/ecommerce/catalog/products")
   assert.equal(seen.searchParams.get("minPrice"), "50")
+  assert.equal(seen.searchParams.get("showAll"), "false")
   assert.equal(seen.searchParams.get("navigation"), "previous")
   assert.equal(result.pagination.mode, "cursor")
   assert.equal(result.items[0].stockKnown, false)
@@ -560,6 +561,7 @@ test("product card thumbnails load the first public photo without account creden
       `/getty/ecommerce/catalog/products/${ids[0]}/photos`
     )
     assert.equal(url.searchParams.get("limit"), "1")
+    assert.equal(url.searchParams.get("showAll"), "false")
     assert.equal(options.headers.has("Authorization"), false)
     assert.equal(options.credentials, "omit")
     return Response.json(
@@ -575,7 +577,7 @@ test("product card thumbnails load the first public photo without account creden
   session.saveSession(fixtureUser, "fixture-access")
   assert.equal(
     await getProductThumbnail(ids[0]),
-    gettyUrl(`/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src`)
+    gettyUrl(`/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src?showAll=false`)
   )
 })
 test("products without uploaded photos have no thumbnail", async (t) => {
@@ -600,6 +602,7 @@ test("product details retain variants and use stable live image redirects", asyn
   }
   mock(t, (url, options) => {
     assert.equal(options.headers.has("Authorization"), false)
+    assert.equal(url.searchParams.get("showAll"), "false")
     if (url.pathname.endsWith("/photos"))
       return Response.json(
         envelope({
@@ -631,7 +634,7 @@ test("product details retain variants and use stable live image redirects", asyn
   assert.equal(product.variants[0].minimumOrderQuantity, 2)
   assert.equal(
     product.image,
-    `https://api.gettymedicalstores.com/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src`
+    `https://api.gettymedicalstores.com/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src?showAll=false`
   )
   assert.equal(await getLiveProduct("invalid-product-slug"), null)
 })
@@ -3531,18 +3534,21 @@ test("guest bag items survive locally and merge once into the customer cart afte
       variantId: ids[2],
     },
   }
-  let puts = 0
+  let merges = 0
   mock(t, (url, options) => {
     assert.equal(url.pathname.startsWith("/getty/v1/order/cart"), true)
     assert.equal(options.headers.get("Authorization"), "Bearer fixture-expired")
-    if (options.method === "PUT") {
-      puts++
-      assert.equal(JSON.parse(options.body).quantity, 5)
+    if (options.method === "POST") {
+      merges++
+      assert.equal(url.pathname, "/getty/v1/order/cart/merge")
+      const payload = JSON.parse(options.body)
+      assert.deepEqual(payload.items, [{ variant: ids[2], quantity: 5 }])
       return Response.json(
         envelope({
-          ...cart,
-          items: [{ ...line, quantity: 5, subtotal: 500 }],
-          subtotal: 500,
+          token: payload.token,
+          replayed: false,
+          results: [{ variant: ids[2], quantity: 5, status: "merged", resultingQuantity: 8 }],
+          cart: { ...cart, items: [{ ...line, quantity: 8, subtotal: 800 }], subtotal: 800 },
         })
       )
     }
@@ -3550,19 +3556,19 @@ test("guest bag items survive locally and merge once into the customer cart afte
       envelope({
         ...cart,
         items: [
-          { ...line, quantity: puts ? 5 : 3, subtotal: puts ? 500 : 300 },
+          { ...line, quantity: merges ? 8 : 3, subtotal: merges ? 800 : 300 },
         ],
-        subtotal: puts ? 500 : 300,
+        subtotal: merges ? 800 : 300,
       })
     )
   })
   window.localStorage.setItem(DEVICE_CART_KEY, JSON.stringify([guestItem]))
   assert.equal(deviceCart(readDeviceItems()).itemCount, 5)
   session.saveSession(fixtureUser, tokenPair)
-  assert.equal((await loadBuyerCart()).items[0].quantity, 5)
+  assert.equal((await loadBuyerCart()).items[0].quantity, 8)
   assert.deepEqual(readDeviceItems(), [])
-  assert.equal((await loadBuyerCart()).items[0].quantity, 5)
-  assert.equal(puts, 1)
+  assert.equal((await loadBuyerCart()).items[0].quantity, 8)
+  assert.equal(merges, 1)
 })
 
 test("reauthentication links preserve safe destinations without redirecting to login again", () => {

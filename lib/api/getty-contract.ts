@@ -87,6 +87,8 @@ export const CatalogProductSchema = z.object({
   currency: z.string(),
   price: z.number().min(0),
   priceFmt: z.string(),
+  discount: z.number().min(0).nullish(),
+  discountFmt: z.string().nullish(),
   inStock: z.boolean(),
   rating: z.object({
     average: z.number().min(1).max(5).nullable(),
@@ -108,6 +110,8 @@ export const CatalogVariantSchema = z.object({
   isDefault: z.boolean(),
   price: z.number().min(0),
   priceFmt: z.string(),
+  discount: z.number().min(0).nullish(),
+  discountFmt: z.string().nullish(),
   saleUnit: z.string(),
   unitsPerPack: z.number().int().safe().min(1),
   minimumOrderQuantity: z.number().int().safe().min(1),
@@ -438,6 +442,7 @@ export const ProfileCreationInputSchema = z.object({
   email: z.email().max(254),
   phone: z.string().max(36).nullable().optional(),
   role: z.union([
+    z.literal("user"),
     z.literal("superadmin"),
     z.literal("admin"),
     z.literal("dispatcher"),

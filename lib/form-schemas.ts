@@ -251,6 +251,7 @@ export const accountFormSchema = (kind: "vendor" | "profile") =>
         }
       : {
           role: z.enum([
+            "user",
             "operations",
             "finance",
             "dispatcher",

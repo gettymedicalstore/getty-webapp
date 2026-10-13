@@ -1,4 +1,9 @@
-import ContentError from "@/components/shared/content-error"
-export default function OrderDetails() {
-  return <ContentError title="Order details are temporarily unavailable" />
+import OrderDetail from "@/features/orders/components/order-detail"
+export default async function OrderPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  return <OrderDetail orderId={id} workspace="customer" />
 }

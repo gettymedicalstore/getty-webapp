@@ -5,7 +5,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query"
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { Toaster } from "sonner"
 import SessionCacheSync from "@/features/auth/components/session-cache-sync"
 import SessionNotice from "@/features/auth/components/session-notice"
@@ -55,7 +55,12 @@ export default function Providers({ children }: { children: ReactNode }) {
       <SessionNotice />
       {children}
 
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        style={{ "--success-text": "#166534" } as CSSProperties}
+      />
     </QueryClientProvider>
   )
 }

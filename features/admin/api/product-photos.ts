@@ -193,7 +193,7 @@ export async function prepareProductImageUpload(file: File) {
   )
 }
 
-async function uploadImageFile(file: File, target: UploadTarget) {
+export async function uploadImageFile(file: File, target: UploadTarget) {
   const multipart =
     target.method === "POST" && Object.keys(target.fields).length > 0
   const body = multipart ? new FormData() : file

@@ -47,27 +47,33 @@ const product = "01a11273-ddcd-7dc4-b84e-fe1c822c3b1c"
 const file = "01a11600-c433-7000-8000-100000056e27"
 const photosLink = `/getty/ecommerce/catalog/products/${product}/photos`
 
-test("featured hero uses catalogue products and their uploaded images with selectable slides", () => {
+test("featured hero uses scheduled adverts, dedicated images and catalogue pricing", () => {
   const client = new QueryClient()
-  const url = `https://api.gettymedicalstores.com${photosLink}/${file}/src`
+  const url = `https://api.gettymedicalstores.com/getty/ecommerce/featured/${file}/photo`
   client.setQueryData(
-    ["products", "featured", 8],
+    ["featured", "public", 20],
     [
       {
-        id: product,
-        slug: "medical-bed",
-        name: "Medical bed",
-        description: "Adjustable care bed",
-        category: { name: "Equipment" },
-        price: 800,
-        compareAtPrice: 1000,
-        image: url,
-        source: "remote",
-        currency: "NGN",
+        id: file,
+        product,
+        productName: "Medical bed",
+        caption: "Comfort for everyday care",
+        ordinal: 0,
+        starts: "2020-01-01T00:00:00+01:00",
+        ends: "2099-01-01T00:00:00+01:00",
       },
-      { id: "another-product", name: "Gloves" },
+      { id: "second", product: "another-product", ordinal: 1 },
     ]
   )
+  client.setQueryData(["products", "detail", product], {
+    id: product,
+    slug: "medical-bed",
+    name: "Medical bed",
+    category: { name: "Equipment" },
+    price: 800,
+    compareAtPrice: 1000,
+    currency: "NGN",
+  })
   const renderHero = () =>
     renderToStaticMarkup(
       React.createElement(
@@ -80,10 +86,10 @@ test("featured hero uses catalogue products and their uploaded images with selec
   assert.ok(html.includes("Medical bed"))
   assert.ok(html.includes(`src="${url}"`))
   assert.ok(html.includes('href="/products/medical-bed"'))
+  assert.ok(html.includes("Comfort for everyday care"))
   assert.ok(html.includes('aria-label="Next featured product"'))
-  assert.ok(html.includes('aria-label="Show Gloves"'))
-  assert.ok(html.includes("20% off"))
-  client.setQueryData(["products", "featured", 8], [])
+  assert.ok(html.includes("Save"))
+  client.setQueryData(["featured", "public", 20], [])
   const empty = renderHero()
   assert.ok(empty.includes("Explore the store"))
   assert.equal(empty.includes('aria-label="Next featured product"'), false)

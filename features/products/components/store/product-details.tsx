@@ -31,6 +31,7 @@ import {
 import ProductPrice from "./product-price"
 import ProductReviews from "./product-reviews"
 import { productQueryOptions } from "../../api/get-product"
+import { selectProductVariant } from "../../utils/product-pricing"
 
 export default function ProductDetails({ slug }: { slug: string }) {
   const productQuery = useQuery(productQueryOptions(slug))
@@ -65,16 +66,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
     baseProduct.variants?.find((v) => v.isDefault) ??
     baseProduct.variants?.[0]
   const product = variant
-    ? {
-        ...baseProduct,
-        variantId: variant.id,
-        price: variant.price,
-        sku: variant.sku,
-        inStock: variant.inStock,
-        minimumOrderQuantity: variant.minimumOrderQuantity,
-        saleUnit: variant.saleUnit,
-        unitsPerPack: variant.unitsPerPack,
-      }
+    ? selectProductVariant(baseProduct, variant)
     : baseProduct
   const minimum = productMinimum(product)
   const orderQuantity = Math.max(minimum, quantity)

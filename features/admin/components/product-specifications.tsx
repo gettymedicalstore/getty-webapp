@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button"
 import RecordTable from "@/components/shared/record-table"
 import ContentError from "@/components/shared/content-error"
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
+import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
+import { isOwnProduct } from "../api/product-ownership"
 import {
   getProductResource,
   saveProductResource,
@@ -31,9 +33,28 @@ import {
 
 export default function ProductSpecifications({
   product,
+  productName,
 }: {
   product: string
+  productName: string
 }) {
+  const session = useAuthSession()
+  const user = session.data?.user
+  const ownership = useQuery({
+    queryKey: [
+      "portal",
+      "product-ownership",
+      user?.id,
+      user?.tenant,
+      product,
+      productName,
+    ],
+    queryFn: () => isOwnProduct(product, productName),
+    enabled: user?.role === "admin",
+  })
+  const canManage =
+    user?.role === "supplier" ||
+    (user?.role === "admin" && ownership.isSuccess && ownership.data === true)
   const query = useQuery({
     queryKey: ["managed-product", product, "specifications"],
     queryFn: () => getProductResource(product, "specifications"),
@@ -45,6 +66,7 @@ export default function ProductSpecifications({
   const [remove, setRemove] = useState<ProductRecord | null>(null)
   const record = editor?.record
   async function submit(values: z.output<typeof specificationFormSchema>) {
+    if (!canManage) return
     await mutation.run(
       () =>
         saveProductResource(
@@ -63,7 +85,7 @@ export default function ProductSpecifications({
       () => setEditor(null)
     )
   }
-  if (editor)
+  if (editor && canManage)
     return (
       <FormCard
         title={record ? "Edit specification" : "Add specification"}
@@ -129,18 +151,42 @@ export default function ProductSpecifications({
         title="Specifications"
         description="Product attributes that help customers choose the right supplies."
         action={
-          <Button
-            className="rounded-lg text-sm"
-            onClick={() => {
-              mutation.setError("")
-              setEditor({ record: null })
-            }}
-          >
-            <Plus aria-hidden className="size-4" />
-            Add specification
-          </Button>
+          canManage && (
+            <Button
+              className="rounded-lg text-sm"
+              onClick={() => {
+                mutation.setError("")
+                setEditor({ record: null })
+              }}
+            >
+              <Plus aria-hidden className="size-4" />
+              Add specification
+            </Button>
+          )
         }
       />
+      {!canManage && (
+        <div
+          className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-[#e1e8e3] bg-[#f6f9f7] px-4 py-3 text-sm text-[#506858]"
+          role="status"
+        >
+          {session.isPending || (user?.role === "admin" && ownership.isPending)
+            ? "Checking whether you can manage these specifications…"
+            : ownership.isError
+              ? "Specifications are read-only while product ownership cannot be verified."
+              : "Specifications are read-only. You can manage specifications for your own products."}
+          {ownership.isError && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={ownership.isFetching}
+              onClick={() => void ownership.refetch()}
+            >
+              Retry ownership check
+            </Button>
+          )}
+        </div>
+      )}
       {query.isPending ? (
         <TableSkeleton />
       ) : query.isError ? (
@@ -161,42 +207,46 @@ export default function ProductSpecifications({
             { key: "unit", label: "Unit" },
             { key: "ordinal", label: "Order" },
           ]}
-          actions={(item) => (
-            <div className="flex gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={`Edit ${item.name}`}
-                onClick={() => {
-                  mutation.setError("")
-                  setEditor({ record: item })
-                }}
-              >
-                <Pencil aria-hidden className="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={`Remove ${item.name}`}
-                onClick={() => {
-                  mutation.setError("")
-                  setRemove(item)
-                }}
-              >
-                <Trash2 aria-hidden className="size-4" />
-              </Button>
-            </div>
-          )}
+          actions={
+            canManage
+              ? (item) => (
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${item.name}`}
+                      onClick={() => {
+                        mutation.setError("")
+                        setEditor({ record: item })
+                      }}
+                    >
+                      <Pencil aria-hidden className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Remove ${item.name}`}
+                      onClick={() => {
+                        mutation.setError("")
+                        setRemove(item)
+                      }}
+                    >
+                      <Trash2 aria-hidden className="size-4" />
+                    </Button>
+                  </div>
+                )
+              : undefined
+          }
         />
       )}
       <DeleteProductItem
         name={valueText(remove?.name, "specification")}
-        open={Boolean(remove)}
+        open={canManage && Boolean(remove)}
         onClose={() => setRemove(null)}
         busy={mutation.busy}
         error={mutation.error}
         onConfirm={() => {
-          if (remove)
+          if (canManage && remove)
             void mutation.run(
               () => deleteProductResource(product, "specifications", remove.id),
               "Specification removed.",

@@ -12,6 +12,10 @@ export type CartItem = {
 }
 
 export type Cart = {
+  id?: string | null
+  version?: number
+  modified?: string | null
+  expires?: string | null
   mode?: "remote" | "device"
   authenticated?: boolean
   expired?: boolean

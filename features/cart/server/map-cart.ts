@@ -2,6 +2,10 @@ import type { Cart as BackendCart } from "@/lib/api/getty-contract"
 import type { Cart } from "../types/cart"
 export function mapBackendCart(cart: BackendCart): Cart {
   return {
+    id: cart.id,
+    version: cart.version,
+    modified: cart.modified,
+    expires: cart.expires,
     mode: "remote",
     authenticated: true,
     expired: cart.expired,

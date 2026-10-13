@@ -2,18 +2,46 @@
 
 import Link from "next/link"
 import { ArrowLeft, ArrowRight, Package } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { featuredProductsQueryOptions } from "@/features/products/api/product-query-options"
+import {
+  publicFeaturedQueryOptions,
+  featuredPhotoUrl,
+} from "@/features/featured/api/featured"
+import { featuredStatus } from "@/features/featured/schema"
+import { productQueryOptions } from "@/features/products/api/get-product"
 import ProductCardImage from "@/features/products/components/store/product-card-image"
 import ProductPrice from "@/features/products/components/store/product-price"
 
 export default function HeroCarousel() {
-  const query = useQuery(featuredProductsQueryOptions(8))
-  const products = query.data ?? []
+  const query = useQuery(publicFeaturedQueryOptions(20))
+  const [now, setNow] = useState(() => Date.now())
+  const products = (query.data ?? [])
+    .filter((entry) =>
+      ["active", "unknown"].includes(featuredStatus(entry, now))
+    )
+    .sort((a, b) => a.ordinal - b.ordinal)
+  useEffect(() => {
+    const boundary = (query.data ?? [])
+      .flatMap((entry) => [Date.parse(entry.starts), Date.parse(entry.ends)])
+      .filter((time) => Number.isFinite(time) && time > now)
+      .sort((a, b) => a - b)[0]
+    if (!boundary) return
+    const timer = setTimeout(
+      () => setNow(Date.now()),
+      Math.min(boundary - Date.now() + 50, 2_147_483_647)
+    )
+    return () => clearTimeout(timer)
+  }, [query.data, now])
   const [selected, setSelected] = useState(0)
   const index = products.length ? selected % products.length : 0
-  const product = products[index]
+  const featured = products[index]
+  const detail = useQuery(productQueryOptions(featured?.product ?? ""))
+  const product = detail.data
+  const href = featured
+    ? `/products/${product?.slug ?? featured.product}`
+    : "/products"
+  const name = product?.name ?? featured?.productName ?? "Featured product"
   const move = (step: number) => {
     if (products.length > 1)
       setSelected(
@@ -70,16 +98,21 @@ export default function HeroCarousel() {
             </h2>
           </div>
           <div aria-live="polite" aria-atomic="true">
-            {product ? (
+            {featured ? (
               <>
                 <Link
-                  href={`/products/${product.slug}`}
-                  aria-label={`View ${product.name}`}
+                  href={href}
+                  aria-label={`View ${name}`}
                   className="group relative mx-5 my-2 block h-48 sm:mx-7 sm:h-56"
                 >
                   <ProductCardImage
-                    key={product.id}
-                    product={product}
+                    key={featured.id}
+                    product={{
+                      id: featured.product,
+                      name,
+                      image: featuredPhotoUrl(featured.id),
+                      source: "remote",
+                    }}
                     eager
                     sizes="(max-width:640px) 85vw, 480px"
                     className="p-2 sm:p-2"
@@ -87,18 +120,25 @@ export default function HeroCarousel() {
                 </Link>
                 <div className="border-t border-[#edf0ee] px-5 pt-4 sm:px-7">
                   <p className="text-xs text-[#66736b]">
-                    {product.category.name}
+                    {product?.category.name ?? "Featured in the store"}
                   </p>
                   <div className="mt-1.5 flex flex-wrap items-start justify-between gap-x-5 gap-y-2">
                     <h3 className="line-clamp-2 min-w-0 flex-1 basis-40 text-lg leading-6 font-semibold text-[#252b37]">
-                      {product.name}
+                      {name}
                     </h3>
-                    <ProductPrice
-                      price={product.price}
-                      compareAtPrice={product.compareAtPrice}
-                      currency={product.currency}
-                    />
+                    {product && (
+                      <ProductPrice
+                        price={product.price}
+                        compareAtPrice={product.compareAtPrice}
+                        currency={product.currency}
+                      />
+                    )}
                   </div>
+                  {featured.caption && (
+                    <p className="mt-3 text-sm leading-6 text-[#526158]">
+                      {featured.caption}
+                    </p>
+                  )}
                 </div>
               </>
             ) : query.isPending ? (
@@ -122,10 +162,10 @@ export default function HeroCarousel() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-5 sm:px-7 sm:pb-6">
             <Link
-              href={product ? `/products/${product.slug}` : "/products"}
+              href={href}
               className="inline-flex min-h-11 items-center justify-center gap-3 rounded-md bg-[#086b43] px-4 text-sm font-semibold text-white transition hover:bg-[#055132]"
             >
-              {product ? "View product" : "View all products"}
+              {featured ? "View product" : "View all products"}
               <ArrowRight className="size-4" aria-hidden />
             </Link>
             {products.length > 1 && (

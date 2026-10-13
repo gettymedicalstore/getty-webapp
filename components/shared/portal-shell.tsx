@@ -74,26 +74,33 @@ export default function PortalShell({
   })
   const tenantName =
     typeof tenantQuery.data?.name === "string" ? tenantQuery.data.name : null
-  const title = productDetail
-    ? (productQuery.data?.product.name ?? "Product details")
-    : tenantRoute
-      ? (tenantName ??
-        (tenantRoute[1] === "customers"
-          ? "Customer details"
-          : "Vendor details"))
-      : path.endsWith("registration")
-        ? "Complete registration"
-        : workspacePageTitle(role, path)
-  const parentHref = productDetail
-    ? `${base}/products`
-    : tenantRoute
-      ? `/admin/${tenantRoute[1]}`
-      : null
-  const parentLabel = productDetail
-    ? "Products"
-    : tenantRoute?.[1] === "customers"
-      ? "Customers"
-      : "Vendors"
+  const featuredCreate = role === "admin" && path === "/admin/featured/new"
+  const title = featuredCreate
+    ? "Add featured product"
+    : productDetail
+      ? (productQuery.data?.product.name ?? "Product details")
+      : tenantRoute
+        ? (tenantName ??
+          (tenantRoute[1] === "customers"
+            ? "Customer details"
+            : "Vendor details"))
+        : path.endsWith("registration")
+          ? "Complete registration"
+          : workspacePageTitle(role, path)
+  const parentHref = featuredCreate
+    ? "/admin/featured"
+    : productDetail
+      ? `${base}/products`
+      : tenantRoute
+        ? `/admin/${tenantRoute[1]}`
+        : null
+  const parentLabel = featuredCreate
+    ? "Featured products"
+    : productDetail
+      ? "Products"
+      : tenantRoute?.[1] === "customers"
+        ? "Customers"
+        : "Vendors"
   const searchAction = role === "customer" ? "/products" : `${base}/products`
   const brand = (
     <Link

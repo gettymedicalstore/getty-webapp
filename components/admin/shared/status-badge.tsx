@@ -7,6 +7,9 @@ type StatusBadgeProps = {
 
 const statusStyles: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
+  scheduled: "bg-amber-100 text-amber-800",
+  expired: "bg-zinc-100 text-zinc-700",
+  closed: "bg-zinc-100 text-zinc-700",
   enabled: "bg-emerald-100 text-emerald-700",
   delivered: "bg-emerald-100 text-emerald-700",
   paid: "bg-emerald-100 text-emerald-700",

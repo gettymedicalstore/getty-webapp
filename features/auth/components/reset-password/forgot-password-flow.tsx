@@ -25,6 +25,7 @@ import { authHref } from "@/lib/auth/navigation"
 import { useAuthFlow } from "./recovery-provider"
 import {
   useRequestPasswordResetOtp,
+  useResendPasswordResetOtp,
   useResetPassword,
   useVerifyPasswordResetOtp,
 } from "../../hooks/use-password-reset"
@@ -44,13 +45,18 @@ export default function ForgotPasswordFlow({
   const flow = useAuthFlow(),
     router = useRouter()
   const request = useRequestPasswordResetOtp(),
+    resendRequest = useResendPasswordResetOtp(),
     verify = useVerifyPasswordResetOtp(),
     reset = useResetPassword()
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [done, setDone] = useState(false),
     [now, setNow] = useState(() => Date.now())
-  const busy = request.isPending || verify.isPending || reset.isPending
+  const busy =
+    request.isPending ||
+    resendRequest.isPending ||
+    verify.isPending ||
+    reset.isPending
   const challenge = flow.challenge
   const href = (path: string) => authHref(path, returnTo)
   useEffect(() => {
@@ -112,7 +118,11 @@ export default function ForgotPasswordFlow({
     if (!challenge || busy || Date.now() < challenge.resendAt) return
     setError("")
     try {
-      await sendCode(challenge.email)
+      const result = await resendRequest.mutateAsync({
+        reference: challenge.reference,
+      })
+      setNow(Date.now())
+      flow.setChallenge({ email: challenge.email, ...result })
       setNotice("A new code has been requested. Use the latest email.")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to resend code.")

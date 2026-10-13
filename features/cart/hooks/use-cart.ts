@@ -8,10 +8,12 @@ import {
   productMinimum,
 } from "@/features/products/utils/availability"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
-import { readSession } from "@/features/auth/api/session-store"
+import { syncSession } from "@/features/auth/api/session-store"
 import { liveCart, canUseBuyerCart } from "../api/live-cart"
 import {
   deviceCart,
+  deviceMergeAttempt,
+  assertGuestItemsEditable,
   deviceCartSnapshot,
   loadBuyerCart,
   parseDeviceItems,
@@ -54,24 +56,47 @@ export function useCart() {
   const query = useQuery({
     queryKey: key,
     enabled: eligible,
-    queryFn: loadBuyerCart,
+    queryFn: () => loadBuyerCart(),
     staleTime: 0,
     retry: false,
   })
+  const attempt = useMemo(
+    () => deviceMergeAttempt(deviceSnapshot),
+    [deviceSnapshot]
+  )
+  const guestSyncPending = Boolean(eligible && attempt?.status === "pending")
+  const hasGuestItems = eligible && deviceItems.length > 0
   function mutate(operation: (cart: Cart) => Promise<Cart>, message?: string) {
-    const sessionId = readSession().sessionId
+    const sessionId = syncSession().sessionId
     const userId = user?.id
     mark(1)
     const next = mutations
       .then(async () => {
         if (
-          readSession().user?.id !== userId ||
-          readSession().sessionId !== sessionId
+          syncSession().user?.id !== userId ||
+          syncSession().sessionId !== sessionId
         )
           throw new Error("Your account has changed. Please try again.")
         await client.cancelQueries({ queryKey: key })
-        const current = await liveCart()
+        const current = await loadBuyerCart()
+        if (
+          readDeviceItems().length ||
+          deviceMergeAttempt()?.status === "pending"
+        )
+          throw new Error(
+            "Finish saving or remove the remaining guest items in your bag before making other changes."
+          )
+        if (
+          syncSession().sessionId !== sessionId ||
+          syncSession().user?.id !== userId
+        )
+          throw new Error("Your account has changed. Please try again.")
         const result = await operation(current)
+        if (
+          syncSession().sessionId !== sessionId ||
+          syncSession().user?.id !== userId
+        )
+          throw new Error("Your account has changed. Please try again.")
         client.setQueryData(key, result)
         if (message) toast.success(message)
         return true
@@ -92,6 +117,7 @@ export function useCart() {
     message?: string
   ) {
     try {
+      assertGuestItemsEditable()
       if (!saveDeviceItems(operation(readDeviceItems())))
         throw new Error("Your bag could not be saved on this device.")
     } catch (error) {
@@ -101,10 +127,10 @@ export function useCart() {
       return Promise.resolve(false)
     }
     if (message) toast.success(message)
-    if (eligible && query.isError) void query.refetch()
+    if (eligible) void query.refetch()
     return Promise.resolve(true)
   }
-  const useDeviceCart = !eligible || (query.isError && deviceItems.length > 0)
+  const useDeviceCart = !eligible
   const selectedCart = useDeviceCart
     ? deviceCart(deviceItems)
     : (query.data ?? deviceCart([]))
@@ -112,9 +138,77 @@ export function useCart() {
     cart: selectedCart,
     requiresBuyerAccount: false,
     isPending: session.isPending || Boolean(eligible && query.isPending),
-    isUpdating: busy > 0,
-    isError: Boolean(eligible && query.isError && !useDeviceCart),
-    syncError: Boolean(eligible && query.isError && useDeviceCart),
+    isUpdating:
+      busy > 0 ||
+      Boolean(
+        eligible &&
+        (query.isPending ||
+          query.isFetching ||
+          hasGuestItems ||
+          guestSyncPending)
+      ),
+    isError: Boolean(
+      eligible && query.isError && !hasGuestItems && !query.data
+    ),
+    syncError: Boolean(
+      eligible && (query.isError || hasGuestItems || guestSyncPending)
+    ),
+    guestItems: eligible ? deviceItems : [],
+    guestMergePending: guestSyncPending,
+    isSyncing: busy > 0 || (eligible && query.isFetching),
+    guestMergeResults:
+      attempt && attempt.account === user?.id ? attempt.results : [],
+    isReadyForCheckout: Boolean(
+      eligible &&
+      query.isSuccess &&
+      !query.isFetching &&
+      !busy &&
+      !hasGuestItems &&
+      !guestSyncPending &&
+      !selectedCart.expired &&
+      selectedCart.items.length &&
+      selectedCart.items.every(
+        (item) => item.purchasable !== false && item.priceAvailable !== false
+      )
+    ),
+    retryGuestMerge: async () => {
+      const expectedSession = syncSession()
+      mark(1)
+      try {
+        await client.cancelQueries({ queryKey: key })
+        const cart = await loadBuyerCart({ retryRejected: true })
+        if (
+          syncSession().sessionId !== expectedSession.sessionId ||
+          syncSession().user?.id !== user?.id
+        )
+          throw new Error("Your account has changed. Please try again.")
+        client.setQueryData(key, cart)
+        return true
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Unable to save your bag."
+        )
+        return false
+      } finally {
+        mark(-1)
+      }
+    },
+    updateGuestQuantity: (variant: string, quantity: number) =>
+      mutateDevice((items) => {
+        if (
+          !Number.isSafeInteger(quantity) ||
+          quantity < 1 ||
+          quantity > 2147483647
+        )
+          throw new Error("Enter a valid whole-number quantity.")
+        return items.map((item) =>
+          item.variantId === variant ? { ...item, quantity } : item
+        )
+      }),
+    removeGuestProduct: (variant: string) =>
+      mutateDevice((items) =>
+        items.filter((item) => item.variantId !== variant)
+      ),
     error: query.error,
     refetch: query.refetch,
     addProduct: (product: Product, quantity = 1) => {
@@ -129,6 +223,11 @@ export function useCart() {
       }
       if (useDeviceCart)
         return mutateDevice((items) => {
+          if (
+            items.length >= 100 &&
+            !items.some((item) => item.variantId === product.variantId)
+          )
+            throw new Error("Your bag can contain up to 100 product options.")
           const existing = items.find(
             (item) => item.variantId === product.variantId
           )

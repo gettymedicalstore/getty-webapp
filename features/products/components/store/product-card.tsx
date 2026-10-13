@@ -15,7 +15,10 @@ import { productQueryOptions } from "../../api/get-product"
 import type { Product } from "../../types/product"
 import ProductCardImage from "./product-card-image"
 import ProductPrice from "./product-price"
-import { productPricing } from "../../utils/product-pricing"
+import {
+  productPricing,
+  selectProductVariant,
+} from "../../utils/product-pricing"
 type Props = {
   product: Product
   isWishlisted?: boolean
@@ -51,16 +54,7 @@ export default function ProductCard({
           detail?.variants?.find((item) => item.inStock)
         if (!detail || !variant)
           throw new Error("This product has no available option.")
-        selected = {
-          ...detail,
-          variantId: variant.id,
-          price: variant.price,
-          sku: variant.sku,
-          inStock: variant.inStock,
-          minimumOrderQuantity: variant.minimumOrderQuantity,
-          saleUnit: variant.saleUnit,
-          unitsPerPack: variant.unitsPerPack,
-        }
+        selected = selectProductVariant(detail, variant)
       }
       if (onAddToCart) onAddToCart(selected)
       else await cart.addProduct(selected, productMinimum(selected))

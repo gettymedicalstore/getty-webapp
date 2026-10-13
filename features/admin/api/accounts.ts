@@ -1,10 +1,18 @@
 import { apiRequest, GettyApiError } from "@/lib/api/client"
+import { apiData } from "@/lib/api/data"
+import { z } from "zod"
 import {
   ProfileCreationInputSchema,
   ProfileCreationResponseSchema,
   VendorOnboardingInputSchema,
   VendorOnboardingResponseSchema,
 } from "@/lib/api/getty-contract"
+
+export async function getVendorOptions() {
+  return z
+    .array(z.object({ id: z.string().min(1), name: z.string().min(1) }))
+    .parse(await apiData("/getty/v1/tenant/vendors/options"))
+}
 
 export async function createTenantAccount(
   kind: "vendor" | "profile",

@@ -3,18 +3,15 @@ import { LoadingRegion } from "@/components/shared/loading-skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { apiData as apiRequest } from "@/lib/api/data"
-import type { RatingPage } from "@/lib/api/getty-contract"
+import { getProductReviews } from "../../api/live-catalog"
 export default function ProductReviews({ product }: { product: string }) {
-  const [page, setPage] = useState({ cursor: 0, navigation: "next" })
+  const [page, setPage] = useState<{
+    cursor: number
+    navigation: "next" | "previous"
+  }>({ cursor: 0, navigation: "next" })
   const query = useQuery({
     queryKey: ["reviews", product, page],
-    queryFn: () =>
-      apiRequest<RatingPage>(
-        `/getty/ecommerce/catalog/products/${product}/ratings?cursor=${page.cursor}&navigation=${page.navigation}`,
-        {},
-        "public"
-      ),
+    queryFn: () => getProductReviews(product, page),
   })
   return (
     <section className="mt-6 rounded-xl bg-white p-5">

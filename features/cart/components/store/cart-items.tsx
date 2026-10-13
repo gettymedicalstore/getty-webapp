@@ -16,8 +16,19 @@ import RemoveCartItemDialog from "./remove-cart-item-dialog"
 import { formatCurrency } from "@/features/products/utils/format-currency"
 import { productMaximum } from "@/features/products/utils/availability"
 
-export default function CartItems({ items }: { items: CartItem[] }) {
+export default function CartItems({
+  items,
+  guest = false,
+}: {
+  items: CartItem[]
+  guest?: boolean
+}) {
   const cart = useCart()
+  const updateQuantity = guest ? cart.updateGuestQuantity : cart.updateQuantity
+  const removeProduct = guest ? cart.removeGuestProduct : cart.removeProduct
+  const disabled = guest
+    ? cart.guestMergePending || cart.isSyncing
+    : cart.isUpdating
   const [pendingRemoval, setPendingRemoval] = useState<CartItem | null>(null)
 
   return (
@@ -26,21 +37,30 @@ export default function CartItems({ items }: { items: CartItem[] }) {
         {items.map((item) => {
           const quantity = getValidQuantity(item.quantity)
 
-          const maximum = Math.max(productMaximum(item.product), 1)
+          const maximum = guest
+            ? 2147483647
+            : Math.max(productMaximum(item.product), 1)
 
-          const minimum = item.minimum ?? 1
+          const minimum = guest ? 1 : (item.minimum ?? 1)
+          const rejection = guest
+            ? cart.guestMergeResults.find(
+                (result) =>
+                  result.variant === item.variantId &&
+                  result.status === "rejected"
+              )
+            : undefined
           const lineTotal = item.lineSubtotal ?? item.product.price * quantity
 
           function decreaseQuantity() {
             if (quantity <= minimum) return
 
-            cart.updateQuantity(item.variantId ?? item.productId, quantity - 1)
+            updateQuantity(item.variantId ?? item.productId, quantity - 1)
           }
 
           function increaseQuantity() {
             if (quantity >= maximum) return
 
-            cart.updateQuantity(item.variantId ?? item.productId, quantity + 1)
+            updateQuantity(item.variantId ?? item.productId, quantity + 1)
           }
 
           return (
@@ -88,27 +108,40 @@ export default function CartItems({ items }: { items: CartItem[] }) {
                     quantity={quantity}
                     maximum={maximum}
                     onSetQuantity={(value) => {
-                      void cart.updateQuantity(
+                      void updateQuantity(
                         item.variantId ?? item.productId,
                         value
                       )
                     }}
                     minimum={minimum}
-                    disabled={cart.isUpdating}
+                    disabled={disabled}
                     onDecrease={decreaseQuantity}
                     onIncrease={increaseQuantity}
                   />
                 </div>
               </div>
 
-              {item.purchasable === false && (
+              {rejection && (
+                <p
+                  role="status"
+                  className="mt-3 text-sm leading-6 text-amber-900"
+                >
+                  {rejection.message ??
+                    "This item could not be added. Adjust its quantity or remove it."}
+                  {rejection.available !== undefined &&
+                    ` Available: ${rejection.available}.`}
+                  {rejection.existing !== undefined &&
+                    ` Already in your account bag: ${rejection.existing}.`}
+                </p>
+              )}
+              {!guest && item.purchasable === false && (
                 <p role="status" className="mt-3 text-sm text-red-700">
                   This option is unavailable. Check its quantity, remove it or
                   choose another option on the product page.
                 </p>
               )}
               <button
-                disabled={cart.isUpdating}
+                disabled={disabled}
                 type="button"
                 onClick={() => setPendingRemoval(item)}
                 className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-[#B42318] transition-colors hover:text-[#912018]"
@@ -131,7 +164,7 @@ export default function CartItems({ items }: { items: CartItem[] }) {
         }}
         onConfirm={async () => {
           if (!pendingRemoval) return false
-          return cart.removeProduct(
+          return removeProduct(
             pendingRemoval.variantId ?? pendingRemoval.productId
           )
         }}
