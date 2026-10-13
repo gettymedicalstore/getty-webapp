@@ -45,13 +45,14 @@ export default function SignupPhoneField({
           </label>
           <span
             aria-hidden="true"
-            className="pointer-events-none truncate pr-6 pl-3 text-sm font-medium text-[#304238]"
+            className="pointer-events-none truncate pr-10 pl-3 text-sm font-medium text-[#304238]"
           >
             {country.code} {country.dial}
           </span>
           <select
             id={countryId}
             {...countryField}
+            data-select-indicator="custom"
             disabled={disabled}
             className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
           >
@@ -63,7 +64,7 @@ export default function SignupPhoneField({
           </select>
           <ChevronDown
             aria-hidden
-            className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-[#667b6d]"
+            className={`pointer-events-none absolute end-3.5 top-1/2 size-4 -translate-y-1/2 text-[#687b6e] ${disabled ? "opacity-60" : ""}`}
           />
         </div>
         <input

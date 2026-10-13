@@ -8,7 +8,6 @@ import {
 import { productDetailsFormSchema } from "@/lib/form-schemas"
 import type { z } from "zod"
 import type { ReactNode } from "react"
-import { ChevronDown } from "lucide-react"
 
 import { useQuery } from "@tanstack/react-query"
 import ContentError from "@/components/shared/content-error"
@@ -166,7 +165,7 @@ export default function ProductDetailsForm({ product }: { product: string }) {
                   <span className="relative block">
                     <FormSelect
                       name={field.key}
-                      className="h-13 w-full appearance-none rounded-lg border border-[#dce2de] bg-white pr-10 pl-3.5 text-base font-normal text-[#34453a] transition-[border-color,box-shadow] outline-none hover:border-[#bac7be] focus-visible:border-[#1b5944] focus-visible:ring-3 focus-visible:ring-[#1b5944]/10 disabled:opacity-50 aria-invalid:border-red-500 sm:text-sm"
+                      className="h-13 w-full rounded-lg border border-[#dce2de] bg-white pl-3.5 text-base font-normal text-[#34453a] transition-[border-color,box-shadow] outline-none hover:border-[#bac7be] focus-visible:border-[#1b5944] focus-visible:ring-3 focus-visible:ring-[#1b5944]/10 disabled:opacity-50 aria-invalid:border-red-500 sm:text-sm"
                       defaultValue={
                         typeof data?.[field.key] === "boolean"
                           ? String(data[field.key])
@@ -177,10 +176,6 @@ export default function ProductDetailsForm({ product }: { product: string }) {
                       <option value="true">Yes</option>
                       <option value="false">No</option>
                     </FormSelect>
-                    <ChevronDown
-                      aria-hidden
-                      className="pointer-events-none absolute top-4.5 right-3.5 size-4 text-[#75847b]"
-                    />
                   </span>
                 </label>
               ))}

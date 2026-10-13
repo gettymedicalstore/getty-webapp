@@ -19,7 +19,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Menu } from "@base-ui/react/menu"
 import {
   ArrowDownUp,
-  ChevronDown,
   MoreHorizontal,
   Search,
   SlidersHorizontal,
@@ -208,7 +207,7 @@ export default function InventoryPageContent() {
             <div className="relative w-full md:w-44">
               <FormSelect
                 name="status"
-                className="h-11 w-full appearance-none rounded-lg border border-[#dfe7e1] bg-white pr-10 pl-3 text-base text-[#263e30] outline-none focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] sm:text-sm"
+                className="h-11 w-full rounded-lg border border-[#dfe7e1] bg-white pl-3 text-base text-[#263e30] outline-none focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] sm:text-sm"
                 aria-label="Stock status"
               >
                 <option value="">All stock</option>
@@ -216,10 +215,6 @@ export default function InventoryPageContent() {
                 <option value="low">Low stock</option>
                 <option value="out">Out of stock</option>
               </FormSelect>
-              <ChevronDown
-                aria-hidden
-                className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-[#718178]"
-              />
             </div>
           </ValidatedForm>
         )}
@@ -444,10 +439,6 @@ export default function InventoryPageContent() {
                       busy={busy}
                       onChange={setAdjustmentType}
                     />
-                    <ChevronDown
-                      aria-hidden
-                      className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-[#718178]"
-                    />
                   </span>
                 </label>
                 <label className="block text-sm font-medium">
@@ -617,7 +608,7 @@ function AdjustmentTypeSelect({
       name="type"
       defaultValue="correction"
       disabled={busy}
-      className="h-11 w-full appearance-none rounded-lg border border-[#dfe7e1] bg-white pr-10 pl-3 text-sm text-[#263e30] outline-none focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] disabled:opacity-50"
+      className="h-11 w-full rounded-lg border border-[#dfe7e1] bg-white pl-3 text-sm text-[#263e30] outline-none focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] disabled:opacity-50"
       onChange={(event) => {
         const type = event.target.value as "correction" | "receipt" | "removal"
         onChange(type)

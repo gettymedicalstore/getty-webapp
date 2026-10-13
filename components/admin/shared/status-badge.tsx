@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 type StatusBadgeProps = {
   status: string
   className?: string
+  label?: string
 }
 
 const statusStyles: Record<string, string> = {
@@ -13,6 +14,9 @@ const statusStyles: Record<string, string> = {
   enabled: "bg-emerald-100 text-emerald-700",
   delivered: "bg-emerald-100 text-emerald-700",
   paid: "bg-emerald-100 text-emerald-700",
+  confirmed: "bg-emerald-100 text-emerald-700",
+  succeeded: "bg-emerald-100 text-emerald-700",
+  completed: "bg-emerald-100 text-emerald-700",
   pending: "bg-amber-100 text-amber-700",
   processing: "bg-blue-100 text-blue-700",
   shipped: "bg-indigo-100 text-indigo-700",
@@ -23,7 +27,11 @@ const statusStyles: Record<string, string> = {
   refunded: "bg-purple-100 text-purple-700",
 }
 
-export default function StatusBadge({ status, className }: StatusBadgeProps) {
+export default function StatusBadge({
+  status,
+  className,
+  label,
+}: StatusBadgeProps) {
   const key = status.toLowerCase()
 
   return (
@@ -34,7 +42,7 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
         className
       )}
     >
-      {status}
+      {label ?? status}
     </span>
   )
 }

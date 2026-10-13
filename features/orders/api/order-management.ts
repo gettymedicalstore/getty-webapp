@@ -40,6 +40,7 @@ export const orderSummarySchema = z.object({
   total: money,
   cursor: z.number().int().nonnegative().optional(),
   subtotal: money.optional(),
+  discount: money.optional(),
   tax: money.optional(),
   shipping: money.optional(),
   commission: money.optional(),
@@ -60,6 +61,12 @@ export const orderLineSchema = z.object({
   variant: z.string(),
   name: z.string(),
   sku: z.string(),
+  options: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.number().finite(), z.boolean(), z.null()])
+    )
+    .optional(),
   unit: z.string(),
   pack: z.number().int().positive(),
   quantity: z.number().int().positive(),
@@ -67,6 +74,15 @@ export const orderLineSchema = z.object({
   total: money,
   discount: money.optional(),
   tax: money.optional(),
+  taxes: z
+    .array(
+      z.object({
+        name: z.string(),
+        rate: z.number().finite().nonnegative(),
+        amount: money,
+      })
+    )
+    .optional(),
   shipping: money.optional(),
   commission: money.optional(),
   status: z.enum(itemStatuses),
@@ -98,6 +114,7 @@ export const orderPaymentSchema = z.object({
 })
 export const orderDetailSchema = orderSummarySchema.extend({
   version: z.number().int().positive().optional(),
+  modified: z.string().nullish(),
   expires: z.string().nullish(),
   notes: z.string().nullish(),
   delivery: z.object({

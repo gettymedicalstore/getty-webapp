@@ -11,14 +11,7 @@ import {
   FieldError,
 } from "@/components/shared/form/validated-form"
 import Link from "next/link"
-import {
-  ArrowLeft,
-  ChevronDown,
-  FileText,
-  Info,
-  UploadCloud,
-  X,
-} from "lucide-react"
+import { ArrowLeft, FileText, Info, UploadCloud, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useDeviceStore } from "@/lib/use-device-store"
@@ -90,7 +83,7 @@ export default function SupplierRegistration() {
                 <FormSelect
                   id="business-type"
                   name="businessType"
-                  className="form-input h-13 appearance-none border-[#dce2de] bg-white pr-11 text-sm"
+                  className="form-input h-13 border-[#dce2de] bg-white text-sm"
                   defaultValue={details.businessType ?? ""}
                   required
                 >
@@ -104,10 +97,6 @@ export default function SupplierRegistration() {
                     <option key={o}>{o}</option>
                   ))}
                 </FormSelect>
-                <ChevronDown
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#748478]"
-                />
               </div>
             </div>
             <FormInputField
@@ -175,7 +164,7 @@ export default function SupplierRegistration() {
                 <FormSelect
                   id="supply-type"
                   name="supplyType"
-                  className="form-input h-13 appearance-none border-[#dce2de] bg-white pr-11 text-sm"
+                  className="form-input h-13 border-[#dce2de] bg-white text-sm"
                   defaultValue={details.supplyType ?? ""}
                   required
                 >
@@ -191,10 +180,6 @@ export default function SupplierRegistration() {
                     <option key={o}>{o}</option>
                   ))}
                 </FormSelect>
-                <ChevronDown
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#748478]"
-                />
               </div>
             </div>
             <FormInputField

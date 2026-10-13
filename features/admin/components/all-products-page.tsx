@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef } from "@tanstack/react-table"
-import { ChevronDown, Package, Search } from "lucide-react"
+import { Package, Search } from "lucide-react"
 import PageHeading from "@/components/shared/page-heading"
 import ContentError from "@/components/shared/content-error"
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
@@ -209,7 +209,7 @@ export default function AllProductsPage() {
           <FormSelect
             name="vendor"
             aria-label="Filter by vendor"
-            className={`${fieldClass} appearance-none pr-11`}
+            className={fieldClass}
             disabled={vendors.isPending || vendors.isError}
           >
             <option value="">
@@ -221,16 +221,12 @@ export default function AllProductsPage() {
               </option>
             ))}
           </FormSelect>
-          <ChevronDown
-            aria-hidden="true"
-            className="pointer-events-none absolute top-6 right-3.5 size-4 -translate-y-1/2 text-[#687b6e]"
-          />
         </div>
         <div className="relative min-w-0">
           <FormSelect
             name="status"
             aria-label="Filter by product status"
-            className={`${fieldClass} appearance-none pr-11`}
+            className={fieldClass}
           >
             <option value="">All statuses</option>
             <option value="draft">Draft</option>
@@ -238,10 +234,6 @@ export default function AllProductsPage() {
             <option value="published">Published</option>
             <option value="rejected">Rejected</option>
           </FormSelect>
-          <ChevronDown
-            aria-hidden="true"
-            className="pointer-events-none absolute top-6 right-3.5 size-4 -translate-y-1/2 text-[#687b6e]"
-          />
         </div>
         {filtered && (
           <Button

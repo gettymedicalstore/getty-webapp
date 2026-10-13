@@ -87,6 +87,105 @@ const page = {
   previousCursor: 0,
 }
 
+test("order details retain the supplied inclusive tax breakdown and optional fields for both audiences", async (t) => {
+  const supplied = {
+    ...detail,
+    version: 7,
+    modified: "2026-10-13T11:03:00+01:00",
+    subtotal: 400000,
+    discount: 0,
+    shipping: 3000,
+    tax: 27906.9767,
+    total: 403000,
+    items: [
+      {
+        ...line,
+        sku: "SKU-11111111111141118111000000000006",
+        options: {},
+        unit: "piece",
+        pack: 1,
+        price: 400000,
+        discount: 0,
+        shipping: 3000,
+        tax: 27906.9767,
+        total: 403000,
+        taxes: [{ name: "VAT", rate: 7.5, amount: 27906.9767 }],
+        received: null,
+        tracking: {},
+      },
+    ],
+    payments: [
+      {
+        id: token,
+        kind: "charge",
+        amount: 403000,
+        method: null,
+        status: "succeeded",
+        settled: "2026-10-13T11:02:00+01:00",
+        currency: "NGN",
+      },
+    ],
+    history: [
+      {
+        id: token,
+        item: null,
+        after: "pending",
+        entry: "2026-10-13T11:00:00+01:00",
+        action: "placed",
+        before: "draft",
+        reason: null,
+      },
+    ],
+  }
+  const calls = []
+  t.mock.method(data, "apiData", async (path) => {
+    calls.push(path)
+    return supplied
+  })
+  for (const audience of ["customer", "vendor"]) {
+    const parsed = await api.getOrder(audience, orderId)
+    assert.deepEqual(parsed, supplied)
+    assert.equal(parsed.tax, 27906.9767)
+    assert.equal(parsed.items[0].taxes[0].amount, 27906.9767)
+    assert.equal(parsed.total, parsed.subtotal + parsed.shipping)
+    assert.notEqual(
+      parsed.total,
+      parsed.subtotal + parsed.shipping + parsed.tax
+    )
+  }
+  assert.deepEqual(calls, [
+    `/getty/v1/order/${orderId}`,
+    `/getty/v1/order/vendor/${orderId}`,
+  ])
+  const pending = api.orderDetailSchema.parse({
+    ...supplied,
+    modified: null,
+    items: [
+      {
+        ...supplied.items[0],
+        options: { size: "Medium", gauge: 18, sterile: true, finish: null },
+      },
+    ],
+    payments: [{ ...supplied.payments[0], settled: null, status: "pending" }],
+  })
+  assert.equal(pending.modified, null)
+  assert.equal(pending.payments[0].settled, null)
+  assert.equal(pending.payments[0].method, null)
+  assert.deepEqual(pending.items[0].options, {
+    size: "Medium",
+    gauge: 18,
+    sterile: true,
+    finish: null,
+  })
+  assert.deepEqual(pending.items[0].tracking, {})
+  // Older list/detail responses may omit the new fields.
+  assert.deepEqual(api.orderDetailSchema.parse(detail), detail)
+  assert.equal(
+    api.orderSummarySchema.parse({ ...summary, discount: 0 }).discount,
+    0
+  )
+})
+
 test("orders use the documented audience endpoint, Lagos inclusive dates, total records and exclusive cursors", async () => {
   const original = data.apiData,
     calls = []

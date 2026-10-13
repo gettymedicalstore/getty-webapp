@@ -175,6 +175,39 @@
   }
 }
 
+/* Keep the indicator inside the control, independent of labels and inline errors.
+   Unlayered so a form-input background shorthand cannot erase the shared arrow. */
+select:not([multiple]):is(:not([size]), [size="0"], [size="1"]):not(
+    [data-select-indicator="custom"]
+  ) {
+  appearance: none;
+  min-width: 0;
+  padding-inline-end: 2.75rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23687b6e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: var(--select-arrow-side, right) 0.875rem center;
+  background-size: 1rem 1rem;
+  text-overflow: ellipsis;
+}
+
+[dir="rtl"] {
+  --select-arrow-side: left;
+}
+
+[dir="ltr"] {
+  --select-arrow-side: right;
+}
+
+@media (forced-colors: active) {
+  select:not([multiple]):is(:not([size]), [size="0"], [size="1"]):not(
+      [data-select-indicator="custom"]
+    ) {
+    appearance: auto;
+    padding-inline-end: 0.875rem;
+    background-image: none;
+  }
+}
+
 /* ==========================================================================
    GETTY MEDICAL STORE LOADER
    ========================================================================== */

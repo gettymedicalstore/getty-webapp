@@ -127,8 +127,8 @@ export default function Addresses() {
         />
       )}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl sm:p-0">
+          <DialogHeader className="shrink-0 px-5 py-5 sm:px-6">
             <DialogTitle>
               {editing ? "Edit address" : "Add delivery address"}
             </DialogTitle>
@@ -139,39 +139,66 @@ export default function Addresses() {
           <ValidatedForm
             schema={addressFormSchema}
             onSubmit={submit}
-            className="space-y-4"
+            className="flex min-h-0 flex-col overflow-hidden"
           >
-            {[
-              {
-                name: "label",
-                label: "Address label",
-                value: editing?.label ?? "Home",
-              },
-              {
-                name: "recipient",
-                label: "Recipient name",
-                value: editing?.recipient ?? session?.user?.name,
-              },
-              {
-                name: "phone",
-                label: "Phone number",
-                value: editing?.phone ?? session?.user?.phone,
-              },
-              { name: "line1", label: "Street address", value: editing?.line1 },
-              { name: "city", label: "City", value: editing?.city },
-              { name: "state", label: "State", value: editing?.state },
-            ].map((f) => (
-              <FormInputField
-                key={f.name}
-                id={f.name}
-                name={f.name}
-                label={f.label}
-                defaultValue={f.value}
-                required
-                minLength={f.name === "phone" ? 10 : 2}
-              />
-            ))}
-            <DialogFooter className="pt-2">
+            <div className="grid min-h-0 grid-cols-1 gap-x-5 gap-y-4 overflow-y-auto overscroll-contain px-5 pt-1 pb-5 sm:grid-cols-2 sm:px-6">
+              {[
+                {
+                  name: "label",
+                  label: "Address label",
+                  value: editing?.label ?? "Home",
+                  autoComplete: "off",
+                },
+                {
+                  name: "recipient",
+                  label: "Recipient name",
+                  value: editing?.recipient ?? session?.user?.name,
+                  autoComplete: "shipping name",
+                },
+                {
+                  name: "phone",
+                  label: "Phone number",
+                  value: editing?.phone ?? session?.user?.phone,
+                  autoComplete: "shipping tel",
+                },
+                {
+                  name: "line1",
+                  label: "Street address",
+                  value: editing?.line1,
+                  autoComplete: "shipping address-line1",
+                },
+                {
+                  name: "city",
+                  label: "City",
+                  value: editing?.city,
+                  autoComplete: "shipping address-level2",
+                },
+                {
+                  name: "state",
+                  label: "State",
+                  value: editing?.state,
+                  autoComplete: "shipping address-level1",
+                },
+              ].map((f) => (
+                <FormInputField
+                  key={f.name}
+                  id={f.name}
+                  name={f.name}
+                  label={f.label}
+                  defaultValue={f.value}
+                  type={f.name === "phone" ? "tel" : "text"}
+                  autoComplete={f.autoComplete}
+                  inputClassName="h-11"
+                  containerClassName={
+                    f.name === "label" || f.name === "line1"
+                      ? "min-w-0 sm:col-span-2"
+                      : "min-w-0"
+                  }
+                  required
+                />
+              ))}
+            </div>
+            <DialogFooter className="shrink-0 flex-row px-5 py-4 sm:px-6 [&>button]:flex-1 sm:[&>button]:flex-none">
               <Button
                 type="button"
                 variant="outline"

@@ -1,7 +1,6 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown } from "lucide-react"
 import { FormSelect } from "@/components/shared/form/validated-form"
 import { getProfileRoles } from "../api/team-profiles"
 
@@ -29,7 +28,7 @@ export default function ProfileRoleField({
           <FormSelect
             name="role"
             defaultValue={currentRole ?? "user"}
-            className="form-input appearance-none pr-11"
+            className="form-input"
             disabled={disabled || !roles.data}
           >
             {roles.isPending && (
@@ -47,10 +46,6 @@ export default function ProfileRoleField({
               </option>
             ))}
           </FormSelect>
-          <ChevronDown
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-[#718178]"
-          />
         </span>
       </label>
       {roles.isError && (
