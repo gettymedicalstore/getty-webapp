@@ -77,6 +77,11 @@ export default function ProductDetails({ slug }: { slug: string }) {
   const available =
     isProductInStock(product) &&
     (product.source !== "remote" || Boolean(variant))
+  const cartLine = cart.cart.items.find((item) =>
+    product.variantId
+      ? item.variantId === product.variantId
+      : item.productId === product.id
+  )
   const isWishlisted = wishlist.hasProduct(product.id)
   const rating = Math.min(5, Math.max(0, product.rating ?? 0))
 
@@ -156,6 +161,10 @@ export default function ProductDetails({ slug }: { slug: string }) {
   }
 
   function handleBuyNow() {
+    if (cartLine) {
+      router.push("/checkout")
+      return
+    }
     if (!available) {
       return
     }
@@ -194,14 +203,6 @@ export default function ProductDetails({ slug }: { slug: string }) {
 
               <div className="grid gap-4 text-sm leading-5 text-[#535862] sm:grid-cols-2">
                 <div className="flex flex-col gap-4">
-                  <p>
-                    <span className="font-normal">SKU: </span>
-
-                    <span className="font-semibold [overflow-wrap:anywhere] text-[#252B37]">
-                      {product.sku ?? product.id.toUpperCase()}
-                    </span>
-                  </p>
-
                   <p>
                     <span className="font-normal">Category: </span>
 
@@ -307,40 +308,44 @@ export default function ProductDetails({ slug }: { slug: string }) {
                       </option>
                     ))}
                   </select>
-                  <span className="mt-2 block text-xs font-normal text-[#5e6f63]">
-                    Quantity counts {product.saleUnit} packs. Minimum order:{" "}
-                    {minimum}. Prices include tax.
-                  </span>
                 </label>
               )}
               <div className="flex flex-wrap gap-3">
-                <QuantitySelector
-                  quantity={orderQuantity}
-                  available={available}
-                  maximum={productMaximum(product)}
-                  minimum={minimum}
-                  onDecrease={decreaseQuantity}
-                  onIncrease={increaseQuantity}
-                />
+                {cartLine ? (
+                  <span className="inline-flex h-12 min-w-32 items-center justify-center rounded-lg border border-[#c9dfcc] bg-[#eff7f0] px-4 text-sm font-semibold text-[#245139]">
+                    {cartLine.quantity} in bag
+                  </span>
+                ) : (
+                  <>
+                    <QuantitySelector
+                      quantity={orderQuantity}
+                      available={available}
+                      maximum={productMaximum(product)}
+                      minimum={minimum}
+                      onDecrease={decreaseQuantity}
+                      onIncrease={increaseQuantity}
+                    />
 
-                <Button
-                  type="button"
-                  onClick={handleAddToCart}
-                  disabled={!available || cart.isUpdating}
-                  className="border-primary bg-primary h-12 min-w-40 flex-1 rounded-lg border px-5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#027A48]"
-                >
-                  <ShoppingCart aria-hidden className="size-5" />
+                    <Button
+                      type="button"
+                      onClick={handleAddToCart}
+                      disabled={!available || cart.isUpdating}
+                      className="border-primary bg-primary h-12 min-w-40 flex-1 rounded-lg border px-5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#027A48]"
+                    >
+                      <ShoppingCart aria-hidden className="size-5" />
 
-                  {available ? "Add to Cart" : "Out of Stock"}
-                </Button>
+                      {available ? "Add to Cart" : "Out of Stock"}
+                    </Button>
+                  </>
+                )}
 
                 <Button
                   type="button"
                   onClick={handleBuyNow}
-                  disabled={!available || cart.isUpdating}
+                  disabled={(!available && !cartLine) || cart.isUpdating}
                   className="h-12 min-w-32 flex-1 rounded-lg border border-[#D7FFEE] bg-[#D7FFEE] px-5 text-sm font-semibold text-[#027A48] shadow-[0_1px_2px_rgba(10,13,18,0.05)] hover:bg-[#C4F9E1]"
                 >
-                  Buy now
+                  {cartLine ? "Checkout" : "Buy now"}
                 </Button>
               </div>
 
@@ -360,10 +365,6 @@ export default function ProductDetails({ slug }: { slug: string }) {
 
                 {isWishlisted ? "Remove from Wishlist" : "Add to Wishlist"}
               </button>
-
-              <p className="rounded-xl bg-[#f6f9f3] p-4 text-sm leading-6 text-[#5e6f63]">
-                Review your items and quantities in your bag before checkout.
-              </p>
             </div>
           </div>
         </div>

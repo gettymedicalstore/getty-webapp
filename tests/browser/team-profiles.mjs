@@ -77,6 +77,7 @@ try {
     )
     const page = await context.newPage()
     await page.goto(`${base}/${role}/settings`)
+    await page.getByRole("tab", { name: "Organisation team" }).click()
     await page.getByRole("heading", { name: "Organisation team" }).waitFor()
     await page.getByRole("cell", { name: /Ada Okafor/ }).waitFor()
     await page

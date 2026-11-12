@@ -16,11 +16,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Getty Medical Store",
-    template: "%s | Getty Medical Store",
+    default: "Getty Medical Stores",
+    template: "%s | Getty Medical Stores",
   },
   description:
-    "Your trusted online pharmacy for quality medicines and healthcare products.",
+    "Shop medical equipment and everyday healthcare essentials from Getty Medical Stores.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { z } from "zod"
 import { toast } from "sonner"
-import { ArrowLeft, CheckCircle2, MapPin, Package } from "lucide-react"
+import { CheckCircle2, MapPin, Package } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { syncSession } from "@/features/auth/api/session-store"
 import { currentSession } from "@/features/auth/api/refresh-session"
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dialog"
 import {
   ValidatedForm,
-  FormInputField,
   FormSelect,
   FormTextarea,
 } from "@/components/shared/form/validated-form"
@@ -42,11 +41,9 @@ import {
   clearOrderAction,
   pendingOrderAction,
 } from "../api/action-recovery"
+import FulfilmentActionDialog from "./fulfilment-action-dialog"
 
 const actionLabels: Record<OrderAction | "cancel-order", string> = {
-  accept: "Accept item",
-  ship: "Mark as shipped",
-  deliver: "Confirm delivery",
   cancel: "Cancel item",
   "request-return": "Request return",
   "approve-return": "Approve return",
@@ -71,7 +68,18 @@ const historyLabels: Record<string, string> = {
   "refund-started": "Refund initiated",
   "refund-succeeded": "Refund completed",
 }
-function ActionDialog({
+function formatDeliveryDate(value: string) {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en-NG", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(parsed)
+}
+export function ActionDialog({
   order,
   selection,
   workspace,
@@ -104,14 +112,6 @@ function ActionDialog({
     reason: reasonRequired
       ? z.string().trim().min(1, "Enter a reason.").max(1000)
       : z.string().optional(),
-    carrier:
-      action === "ship"
-        ? z.string().trim().min(1, "Enter the carrier.").max(100)
-        : z.string().optional(),
-    tracking:
-      action === "ship"
-        ? z.string().trim().min(1, "Enter the tracking number.").max(200)
-        : z.string().optional(),
     restock:
       action === "receive-return"
         ? z.enum(["true", "false"], {
@@ -145,9 +145,6 @@ function ActionDialog({
           version,
           action,
           ...(reasonRequired ? { reason: values.reason } : {}),
-          ...(action === "ship"
-            ? { carrier: values.carrier, tracking: values.tracking }
-            : {}),
           ...(action === "receive-return"
             ? { restock: values.restock === "true" }
             : {}),
@@ -209,20 +206,16 @@ function ActionDialog({
         <DialogTitle>{actionLabels[action]}</DialogTitle>
         <DialogDescription>
           {selection.line?.name ?? order.reference}.{" "}
-          {action === "ship"
-            ? "Add the carrier and tracking number for this entire item quantity."
-            : action === "receive-return"
-              ? "Confirm the returned items were received and inspected before choosing whether to restock."
-              : action.includes("cancel")
-                ? "This cancels the entire quantity. Eligible refunds are processed separately."
-                : "Confirm this change to the order."}
+          {action === "receive-return"
+            ? "Confirm the returned items were received and inspected before choosing whether to restock."
+            : action.includes("cancel")
+              ? "This cancels the entire quantity. Eligible refunds are processed separately."
+              : "Confirm this change to the order."}
         </DialogDescription>
         <ValidatedForm
           schema={schema}
           defaultValues={{
             reason: String(pending?.reason ?? ""),
-            carrier: String(pending?.carrier ?? ""),
-            tracking: String(pending?.tracking ?? ""),
             restock:
               pending?.restock === undefined ? "" : String(pending.restock),
           }}
@@ -247,20 +240,6 @@ function ActionDialog({
                   className="min-h-24"
                 />
               </div>
-            )}
-            {action === "ship" && (
-              <>
-                <FormInputField
-                  id="order-carrier"
-                  name="carrier"
-                  label="Carrier"
-                />
-                <FormInputField
-                  id="order-tracking"
-                  name="tracking"
-                  label="Tracking number"
-                />
-              </>
             )}
             {action === "receive-return" && (
               <div>
@@ -336,11 +315,16 @@ export default function OrderDetail({
     client = useQueryClient()
   const audience = workspace === "customer" ? "customer" : "vendor"
   const [selection, setSelection] = useState<SelectedAction | null>(null)
+  const [confirmReceipt, setConfirmReceipt] = useState(false)
   const [tab, setTab] = useState("items")
   const query = useQuery({
     queryKey: ["order", session?.user?.id, audience, orderId],
     queryFn: () => getOrder(audience, orderId),
     enabled: Boolean(session?.user),
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.visibilityState === "visible"
+        ? 15_000
+        : false,
   })
   const refresh = async () => {
     await Promise.all([
@@ -368,12 +352,31 @@ export default function OrderDetail({
   const cancellable =
     audience === "customer" &&
     order.version &&
-    !["cancelled", "expired", "completed"].includes(order.status) &&
+    ["pending", "confirmed"].includes(order.status) &&
+    (!order.fulfilment || order.fulfilment === "placed") &&
     order.items.some((line) => line.status === "pending") &&
     order.items.every((line) => ["pending", "cancelled"].includes(line.status))
   const paid = order.payments?.some(
     (payment) => payment.kind === "charge" && payment.status === "succeeded"
   )
+  const deliveryStage =
+    order.status === "pending" && !paid
+      ? "Awaiting payment"
+      : order.status === "cancelled"
+        ? "Cancelled"
+        : order.status === "expired"
+          ? "Expired"
+          : order.fulfilment
+            ? {
+                placed: "Order placed",
+                preparing: "Preparing your order",
+                ready: "Packed and ready",
+                dispatched: "On the way",
+                delivered: "Delivered",
+                cancelled: "Cancelled",
+                expired: "Expired",
+              }[order.fulfilment]
+            : "Stage unavailable"
   const itemCount = order.items.reduce((sum, line) => sum + line.quantity, 0)
   const tabs = [
     "items",
@@ -383,30 +386,48 @@ export default function OrderDetail({
   ]
   return (
     <div className="min-w-0 space-y-6">
-      <Link
-        href={`/${workspace}/orders`}
-        className="text-primary inline-flex min-h-11 items-center gap-2 text-sm font-medium"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        Back to orders
-      </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1.5">
           <p className="text-muted-foreground text-xs font-medium">
             Order reference
           </p>
-          <p className="text-sm font-semibold break-all">{order.reference}</p>
+          <p className="text-sm font-semibold break-all">
+            {order.orderCode ?? order.reference}
+          </p>
           <p className="text-muted-foreground text-xs leading-5">
             Placed {date(order.placed)} · Africa/Lagos
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={order.status} />
+          {order.fulfilment && <StatusBadge status={order.fulfilment} />}
           {audience === "customer" && paid && (
             <StatusBadge status="paid" label="Payment received" />
           )}
         </div>
       </div>
+      {audience === "customer" && (
+        <section
+          aria-label="Current delivery stage"
+          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#dce9df] bg-[#f4faf6] p-4 sm:p-5"
+        >
+          <div>
+            <p className="text-muted-foreground text-xs font-medium">
+              Current delivery stage
+            </p>
+            <p className="mt-1 text-lg font-semibold text-[#1f5135]">
+              {deliveryStage}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTab("delivery")}
+          >
+            View delivery timeline
+          </Button>
+        </section>
+      )}
       {(cancellable ||
         (audience === "customer" && order.status === "pending")) && (
         <div className="flex flex-wrap gap-3">
@@ -517,7 +538,9 @@ export default function OrderDetail({
                       label={
                         line.status === "pending" && order.status === "pending"
                           ? "Awaiting payment"
-                          : itemStatusLabels[line.status]
+                          : ["cancelled", "returned"].includes(line.status)
+                            ? itemStatusLabels[line.status]
+                            : "Included in Getty delivery"
                       }
                     />
                   </div>
@@ -584,15 +607,6 @@ export default function OrderDetail({
                       </span>
                     </p>
                   )}
-                  {line.tracking &&
-                    (line.tracking.carrier ||
-                      line.tracking.tracking ||
-                      line.tracking.number) && (
-                      <p className="mt-3 text-sm break-all">
-                        Carrier: {line.tracking.carrier ?? "—"} · Tracking:{" "}
-                        {line.tracking.tracking ?? line.tracking.number ?? "—"}
-                      </p>
-                    )}
                   {availableLineActions(audience, order, line).length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
                       {availableLineActions(audience, order, line).map(
@@ -612,29 +626,131 @@ export default function OrderDetail({
               ))}
             {tab === "delivery" && (
               <div className="min-w-0 rounded-xl border bg-white p-5 sm:p-6">
-                <h2 className="mb-5 flex items-center gap-2 font-semibold">
+                <h2 className="font-semibold">Getty delivery</h2>
+                <p className="text-muted-foreground mt-2 text-sm">
+                  This timeline covers your whole order.
+                </p>
+                <ol
+                  className="mt-4 grid gap-2 sm:grid-cols-5"
+                  aria-label="Order delivery timeline"
+                >
+                  {(
+                    [
+                      "placed",
+                      "preparing",
+                      "ready",
+                      "dispatched",
+                      "delivered",
+                    ] as const
+                  ).map((stage, index) => {
+                    const reached =
+                      order.fulfilment &&
+                      [
+                        "placed",
+                        "preparing",
+                        "ready",
+                        "dispatched",
+                        "delivered",
+                      ].indexOf(order.fulfilment) >= index
+                    const event = order.history?.find(
+                      (entry) => entry.action === `fulfilment-${stage}`
+                    )
+                    return (
+                      <li
+                        key={stage}
+                        className={`rounded-lg border px-3 py-2 text-sm capitalize ${reached ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "text-muted-foreground"}`}
+                      >
+                        {stage}
+                        {event && (
+                          <time
+                            dateTime={event.entry}
+                            className="mt-1 block text-xs"
+                          >
+                            {date(event.entry)}
+                          </time>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ol>
+                {order.deliveryQuote &&
+                  (order.deliveryQuote.earliest ||
+                    order.deliveryQuote.latest) && (
+                    <div className="mt-5 rounded-lg bg-[#f4faf6] px-4 py-3 text-sm">
+                      <p className="font-medium text-[#1f5135]">
+                        Estimated delivery
+                      </p>
+                      <p className="mt-1">
+                        {[
+                          order.deliveryQuote.earliest,
+                          order.deliveryQuote.latest,
+                        ]
+                          .filter((value): value is string => Boolean(value))
+                          .map(formatDeliveryDate)
+                          .join(" – ")}
+                      </p>
+                      {order.deliveryQuote.estimateOnly && (
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          This delivery window is provisional.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                {order.tracking &&
+                  (order.tracking.carrier || order.tracking.reference) && (
+                    <p className="mt-4 text-sm break-words">
+                      {order.tracking.carrier
+                        ? `Carrier: ${order.tracking.carrier}`
+                        : ""}
+                      {order.tracking.reference
+                        ? ` · Tracking: ${order.tracking.reference}`
+                        : ""}
+                    </p>
+                  )}
+                {order.fulfilment === "dispatched" && order.version && (
+                  <div className="mt-5 rounded-lg bg-[#f2f8f3] p-4">
+                    <p className="text-sm">
+                      Received the entire remaining order? Confirm receipt only
+                      after checking every item. If anything is missing, contact
+                      Getty support.
+                    </p>
+                    <Button
+                      className="mt-3"
+                      onClick={() => setConfirmReceipt(true)}
+                    >
+                      Confirm receipt of my order
+                    </Button>
+                  </div>
+                )}
+                <h2 className="mt-7 mb-5 flex items-center gap-2 font-semibold">
                   <MapPin className="text-primary size-4" aria-hidden />{" "}
                   Delivery address
                 </h2>
-                <address className="space-y-2 text-sm leading-6 break-words not-italic">
-                  <p className="font-semibold">{order.delivery.name}</p>
-                  <p>{order.delivery.address}</p>
-                  <p>
-                    {[
-                      order.delivery.city,
-                      order.delivery.state,
-                      order.delivery.postcode,
-                      order.delivery.country === "NG"
-                        ? "Nigeria"
-                        : order.delivery.country,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
+                {order.delivery ? (
+                  <address className="space-y-2 text-sm leading-6 break-words not-italic">
+                    <p className="font-semibold">{order.delivery.name}</p>
+                    <p>{order.delivery.address}</p>
+                    <p>
+                      {[
+                        order.delivery.city,
+                        order.delivery.state,
+                        order.delivery.postcode,
+                        order.delivery.country === "NG"
+                          ? "Nigeria"
+                          : order.delivery.country,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Phone: {order.delivery.phone}
+                    </p>
+                  </address>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    No delivery address returned.
                   </p>
-                  <p className="text-muted-foreground">
-                    Phone: {order.delivery.phone}
-                  </p>
-                </address>
+                )}
                 {order.notes && (
                   <div className="mt-5 border-t pt-4">
                     <h3 className="text-sm font-medium">Delivery note</h3>
@@ -710,6 +826,11 @@ export default function OrderDetail({
                 ) : (
                   <ol className="mt-5 space-y-5 border-l border-[#e3e9e5] pl-5">
                     {[...order.history]
+                      .filter((event) =>
+                        /^(placed|payment-|charge-|refund-|fulfilment-|cancel|item-cancel|return|item-return)/i.test(
+                          event.action
+                        )
+                      )
                       .sort((a, b) => Date.parse(b.entry) - Date.parse(a.entry))
                       .map((event) => (
                         <li className="relative" key={event.id}>
@@ -766,8 +887,8 @@ export default function OrderDetail({
                 received
               </p>
               <p className="mt-2 text-sm leading-6 text-[#42664f]">
-                Your payment is recorded. Delivery progress is shown in the
-                Items tab.
+                Your payment is recorded. Follow the whole-order timeline in the
+                Delivery tab.
               </p>
             </div>
           )}
@@ -780,6 +901,22 @@ export default function OrderDetail({
           workspace={workspace}
           onClose={() => setSelection(null)}
           onUpdated={refresh}
+        />
+      )}
+      {confirmReceipt && order.version && (
+        <FulfilmentActionDialog
+          orderId={order.id}
+          selection={{ action: "deliver", version: order.version }}
+          audience="customer"
+          onClose={() => setConfirmReceipt(false)}
+          onSuccess={(result) => {
+            client.setQueryData(
+              ["order", session?.user?.id, "customer", orderId],
+              result
+            )
+            void client.invalidateQueries({ queryKey: ["orders"] })
+          }}
+          onRefresh={refresh}
         />
       )}
     </div>

@@ -504,6 +504,49 @@ test("public reads do not refresh or send credentials when an account is signed 
   assert.equal(session.readSession().user.id, fixtureUser.id)
 })
 
+test("public categories have usable artwork when the API has no image field", async (t) => {
+  mock(t, () =>
+    Response.json(
+      envelope([
+        {
+          id: ids[0],
+          name: "Dental Equipment",
+          description: null,
+          subcategories: [
+            {
+              id: ids[1],
+              name: "Dental Materials",
+              parent: ids[0],
+              description: null,
+            },
+          ],
+        },
+        {
+          id: ids[2],
+          name: "Sterilization & Utilities",
+          description: null,
+          subcategories: [],
+        },
+        {
+          id: ids[3],
+          name: "New category",
+          description: null,
+          subcategories: [],
+        },
+      ])
+    )
+  )
+  const categories = await getLiveCategories()
+  assert.equal(categories.length, 4)
+  assert.equal(categories[0].image, "/images/10.webp")
+  assert.equal(categories[1].image, "/images/10.webp")
+  assert.equal(categories[2].image, "/images/21.webp")
+  for (const category of categories) {
+    assert.notEqual(category.image, "/images/product-placeholder.svg")
+    assert.ok(existsSync(path.join(root, "public", category.image)))
+  }
+})
+
 test("public catalog omits credentials and forwards filters without invented inventory counts", async (t) => {
   let seen
   mock(t, (url, options) => {
@@ -577,7 +620,9 @@ test("product card thumbnails load the first public photo without account creden
   session.saveSession(fixtureUser, "fixture-access")
   assert.equal(
     await getProductThumbnail(ids[0]),
-    gettyUrl(`/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src?showAll=false`)
+    gettyUrl(
+      `/getty/ecommerce/catalog/products/${ids[0]}/photos/${ids[3]}/src?showAll=false`
+    )
   )
 })
 test("products without uploaded photos have no thumbnail", async (t) => {
@@ -3547,8 +3592,19 @@ test("guest bag items survive locally and merge once into the customer cart afte
         envelope({
           token: payload.token,
           replayed: false,
-          results: [{ variant: ids[2], quantity: 5, status: "merged", resultingQuantity: 8 }],
-          cart: { ...cart, items: [{ ...line, quantity: 8, subtotal: 800 }], subtotal: 800 },
+          results: [
+            {
+              variant: ids[2],
+              quantity: 5,
+              status: "merged",
+              resultingQuantity: 8,
+            },
+          ],
+          cart: {
+            ...cart,
+            items: [{ ...line, quantity: 8, subtotal: 800 }],
+            subtotal: 800,
+          },
         })
       )
     }

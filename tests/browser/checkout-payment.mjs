@@ -72,7 +72,15 @@ async function setup(mode = "normal") {
           })
         payment = { ...sample.startPayment }
         order = { ...order, payments: [payment] }
-        return ok(payment)
+        return route.fulfill({
+          status: 202,
+          json: {
+            status: 202,
+            success: true,
+            message: "Accepted",
+            data: payment,
+          },
+        })
       }
       if (p === `/getty/v1/order/${order.id}/payments/${sample.payment.id}`) {
         if (payment?.status === "created") payment = { ...sample.payment }
@@ -108,7 +116,7 @@ async function fill(page) {
     .getByRole("textbox", { name: "Street address" })
     .fill("12 Example Street")
   await page.getByRole("textbox", { name: "City", exact: true }).fill("Abuja")
-  await page.getByRole("textbox", { name: "State / FCT" }).fill("FCT")
+  await page.getByRole("combobox", { name: "State" }).selectOption("FCT")
   await page.getByRole("button", { name: "Review delivery & total" }).click()
   await page.getByRole("button", { name: "Place order", exact: true }).waitFor()
 }
@@ -129,6 +137,10 @@ try {
   const { page, calls } = run
   await page.goto(`${base}/checkout`)
   await page.getByRole("textbox", { name: "Recipient name" }).waitFor()
+  assert.equal(
+    await page.getByRole("textbox", { name: "Country code" }).count(),
+    0
+  )
   await responsive(page, "delivery form")
   const accessibility = await new AxeBuilder({ page })
     .include("#main-content")
@@ -153,7 +165,11 @@ try {
   })
   await page.getByRole("button", { name: "Place order", exact: true }).click()
   await page.getByRole("button", { name: "Pay securely", exact: true }).click()
-  await page.getByRole("link", { name: "Continue to payment" }).waitFor()
+  await page.getByRole("link", { name: "Pay now" }).waitFor()
+  assert.equal(
+    await page.getByRole("button", { name: "Check status" }).count(),
+    0
+  )
   assert.equal(calls.filter((c) => c.path.endsWith("/checkout")).length, 1)
   assert.equal(calls.filter((c) => c.path.endsWith("/payments")).length, 1)
   assert.ok(calls.find((c) => c.path.endsWith("/checkout")).body.quote)
@@ -161,7 +177,9 @@ try {
   await responsive(page, "payment")
   run.setPayment({ ...sample.payment, status: "unknown", link: null })
   run.setOrder({ payments: [{ ...sample.payment, status: "unknown" }] })
-  await page.goto(`${base}/checkout/callback?reference=provider-reference`)
+  await page.goto(
+    `${base}/payment/return?status=successful&tx_ref=provider-reference&transaction_id=12345`
+  )
   await page
     .getByRole("heading", { name: "Your payment is being checked" })
     .waitFor()
@@ -171,16 +189,13 @@ try {
       .count(),
     0
   )
-  assert.equal(
-    await page.getByRole("link", { name: "Continue to payment" }).count(),
-    0
-  )
+  assert.equal(await page.getByRole("link", { name: "Pay now" }).count(), 0)
   run.setPayment({ ...sample.payment, status: "succeeded" })
   run.setOrder({
     status: "expired",
     payments: [{ ...sample.payment, status: "succeeded" }],
   })
-  await page.getByRole("button", { name: "Check status", exact: true }).click()
+  await page.reload()
   await page.getByRole("heading", { name: "Order expired" }).waitFor()
   await page
     .getByText("Payment was received after this order closed.", {
@@ -194,7 +209,7 @@ try {
     0
   )
   run.setOrder({ status: "confirmed" })
-  await page.getByRole("button", { name: "Check status", exact: true }).click()
+  await page.reload()
   await page.getByRole("heading", { name: "Your order is confirmed" }).waitFor()
   assert.equal(calls.filter((c) => c.path.endsWith("/payments")).length, 1)
   assert.deepEqual(run.errors, [])
@@ -206,11 +221,11 @@ try {
     .getByRole("button", { name: "Place order", exact: true })
     .click()
   await retry.page
-    .getByRole("button", { name: "Retry saved order request" })
+    .getByRole("button", { name: "Check saved order request" })
     .waitFor()
   await retry.page.reload()
   await retry.page
-    .getByRole("button", { name: "Retry saved order request" })
+    .getByRole("button", { name: "Check saved order request" })
     .click()
   await retry.page
     .getByRole("button", { name: "Pay securely", exact: true })
@@ -237,9 +252,7 @@ try {
   await paymentRetry.page
     .getByRole("button", { name: "Pay securely", exact: true })
     .click()
-  await paymentRetry.page
-    .getByRole("link", { name: "Continue to payment" })
-    .waitFor()
+  await paymentRetry.page.getByRole("link", { name: "Pay now" }).waitFor()
   const paymentAttempts = paymentRetry.calls.filter(
     (c) => c.path.endsWith("/payments") && c.method === "POST"
   )

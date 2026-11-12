@@ -59,7 +59,7 @@ export default function CategoriesPageContent() {
                       alt=""
                       fill
                       sizes="(max-width:640px) 90vw,(max-width:1024px) 45vw,380px"
-                      className="object-contain p-6 transition duration-500 group-hover:scale-105"
+                      className="object-contain transition duration-500 group-hover:scale-105"
                     />
                   )}
                 </div>

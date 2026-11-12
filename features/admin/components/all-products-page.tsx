@@ -51,7 +51,7 @@ const columns: ColumnDef<AllVendorProduct, unknown>[] = [
     cell: ({ row: { original: product } }) => (
       <div className="max-w-xs min-w-44 space-y-1">
         <Link
-          href={`/admin/products/${encodeURIComponent(product.id)}`}
+          href={`/admin/all-products/${encodeURIComponent(product.id)}`}
           className="font-semibold text-[#294634] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
         >
           {product.name}
@@ -136,7 +136,7 @@ const columns: ColumnDef<AllVendorProduct, unknown>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <Link
-        href={`/admin/products/${encodeURIComponent(row.original.id)}`}
+        href={`/admin/all-products/${encodeURIComponent(row.original.id)}`}
         className="inline-flex min-h-11 items-center rounded-md px-2 font-semibold whitespace-nowrap text-[#087b4c] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
         aria-label={`View ${row.original.name}`}
       >

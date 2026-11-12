@@ -44,6 +44,9 @@ const cases = [
     "/admin/customers",
     "/admin/inventory",
     "/admin/orders",
+    `/admin/orders/${id}`,
+    "/admin/fulfilment",
+    `/admin/fulfilment/${id}`,
     "/admin/settings",
     ...[
       "overview",
@@ -58,6 +61,7 @@ const cases = [
   ].map((path) => ({ path, role: "admin" })),
   ...[
     "/supplier/orders",
+    `/supplier/orders/${id}`,
     "/supplier/products",
     "/supplier/inventory",
     "/supplier/account",
@@ -77,7 +81,9 @@ const cases = [
 ]
 const report = []
 for (const entry of cases.filter(
-  (x) => !process.env.AUDIT_FILTER || x.path.includes(process.env.AUDIT_FILTER)
+  (x) =>
+    (!process.env.AUDIT_FILTER || x.path.includes(process.env.AUDIT_FILTER)) &&
+    (!process.env.AUDIT_EXACT || x.path === process.env.AUDIT_EXACT)
 )) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -94,7 +100,7 @@ for (const entry of cases.filter(
     )
     await page.waitForTimeout(800)
     const expectedPath =
-      entry.path === "/checkout"
+      entry.path === "/checkout" || entry.path === "/payment/result"
         ? "/login"
         : entry.path === "/customer"
           ? "/customer/orders"

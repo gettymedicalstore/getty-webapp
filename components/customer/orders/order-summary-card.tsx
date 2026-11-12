@@ -60,11 +60,6 @@ export default function OrderSummaryCard({
           <SummaryRow label="Commission" value={format(commission)} />
         </div>
       )}
-      <p className="text-muted-foreground mt-3 text-xs leading-5">
-        {vendor
-          ? "Your items only. Original amounts before any refunds; not a payout balance."
-          : "Original order total, before any refunds."}
-      </p>
     </section>
   )
 }

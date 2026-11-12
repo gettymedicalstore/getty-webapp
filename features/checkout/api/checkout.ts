@@ -12,9 +12,15 @@ const paymentStatus = z.enum([
   "failed",
   "cancelled",
 ])
+export const paymentProviderSchema = z.enum([
+  "flutterwave",
+  "payaza",
+  "paystack",
+])
 export const paymentSummarySchema = z.object({
   id: GettyIdSchema,
   kind: z.enum(["charge", "refund"]),
+  provider: paymentProviderSchema.optional(),
   status: paymentStatus,
   amount,
   currency: z.string(),
@@ -50,6 +56,15 @@ export const previewSchema = z.object({
   cart: GettyIdSchema,
   currency: z.literal("NGN"),
   delivery: deliverySchema,
+  deliveryQuote: z
+    .object({
+      service: z.string().optional(),
+      estimatedMeasurements: z.boolean().optional(),
+      estimateOnly: z.boolean().optional(),
+      earliest: z.string().nullable().optional(),
+      latest: z.string().nullable().optional(),
+    })
+    .optional(),
   quote: z.string().regex(/^[a-f0-9]{64}$/i),
   subtotal: amount,
   shipping: amount,
@@ -158,9 +173,18 @@ export function hostedPaymentLink(
     return null
   try {
     const url = new URL(payment.link)
-    return url.protocol === "https:" && !url.username && !url.password
-      ? url.href
-      : null
+    if (
+      payment.provider !== "flutterwave" ||
+      url.protocol !== "https:" ||
+      url.hostname !== "checkout-v2.dev-flutterwave.com" ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      (url.port && url.port !== "443") ||
+      !/^\/v3\/hosted\/pay\/[^/]+$/.test(url.pathname)
+    )
+      return null
+    return url.href
   } catch {
     return null
   }

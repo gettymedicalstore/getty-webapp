@@ -6,6 +6,11 @@ import {
 import { trackingSchema } from "@/lib/form-schemas"
 
 import { useMutation } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
+import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
+import { authHref } from "@/lib/auth/navigation"
+import { Role } from "@/lib/auth/roles"
+import { formatOrderAmount } from "../../utils/format-order-amount"
 import {
   ArrowRight,
   Check,
@@ -22,13 +27,44 @@ export default function TrackOrderPageContent({
 }: {
   initialOrderNumber?: string
 }) {
+  const router = useRouter()
+  const { data: session } = useAuthSession()
   const trackingMutation = useMutation({
-    mutationFn: trackOrder,
+    mutationFn: (input: TrackOrderInput) =>
+      trackOrder(
+        input,
+        session?.user?.role === Role.SUPPLIER ? "vendor" : "customer"
+      ),
   })
 
   function submit(values: TrackOrderInput) {
+    if (!session?.user) {
+      router.push(
+        authHref(
+          "/login",
+          `/track-order?${new URLSearchParams({ orderNumber: values.orderNumber.trim() })}`
+        )
+      )
+      return
+    }
+    if (session.user.role === Role.ADMIN) {
+      router.push("/admin/orders")
+      return
+    }
     trackingMutation.mutate(values)
   }
+
+  const order = trackingMutation.data
+  const stages = [
+    "placed",
+    "preparing",
+    "ready",
+    "dispatched",
+    "delivered",
+  ] as const
+  const stageIndex = order?.fulfilment
+    ? stages.indexOf(order.fulfilment as (typeof stages)[number])
+    : -1
 
   return (
     <section className="bg-[#f7f9f5] py-10 sm:py-14 lg:py-18">
@@ -50,7 +86,8 @@ export default function TrackOrderPageContent({
                 Track your order
               </h1>
               <p className="mt-4 max-w-md text-sm leading-7 text-[#536b5a] sm:text-base">
-                Enter your order number to find the latest update.
+                Enter the printed order code to see Getty’s latest delivery
+                update. Sign in to protect your order details.
               </p>
               <div className="mt-10 border-t border-[#d4e4d7] pt-6">
                 <p className="flex items-start gap-3 text-sm leading-6 text-[#496350]">
@@ -71,7 +108,7 @@ export default function TrackOrderPageContent({
                 Find an order
               </h2>
               <p className="mt-2 text-sm leading-6 text-[#64766a]">
-                You’ll find the order number in your confirmation email.
+                You’ll find the code in your order confirmation.
               </p>
               <ValidatedForm
                 schema={trackingSchema}
@@ -94,7 +131,7 @@ export default function TrackOrderPageContent({
                       trackingMutation.reset()
                     }}
                     autoComplete="off"
-                    placeholder="e.g. GET-123456"
+                    placeholder="e.g. 2610-K7P4"
                     className="form-input mt-2 h-12 w-full rounded-xl"
                   />
                 </div>
@@ -127,43 +164,98 @@ export default function TrackOrderPageContent({
                   </Link>
                 </div>
               )}
-              {trackingMutation.isSuccess && !trackingMutation.data && (
-                <div
-                  role="status"
-                  className="mt-6 rounded-xl border border-[#dce6de] bg-[#f6f9f6] p-4 text-sm text-[#3e5846]"
+              {!session?.user && (
+                <p className="text-muted-foreground mt-4 text-sm">
+                  You’ll be asked to sign in before any order details are shown.
+                </p>
+              )}
+              {session?.user?.role === Role.ADMIN && (
+                <Link
+                  href="/admin/orders"
+                  className="text-primary mt-4 inline-flex min-h-11 items-center text-sm font-semibold"
                 >
-                  No matching order was found. Check the details and try again.
-                </div>
+                  Open Getty fulfilment queue{" "}
+                  <ArrowRight className="ml-2 size-4" aria-hidden />
+                </Link>
               )}
             </div>
           </div>
         </div>
-        {trackingMutation.data && (
+        {order && (
           <div className="mx-auto mt-6 max-w-5xl rounded-2xl border border-[#dfe9df] bg-white p-6 sm:p-8">
-            <div className="flex justify-between border-b border-black/5 pb-5">
-              <strong>{trackingMutation.data.orderNumber}</strong>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 pb-5">
+              <div>
+                <strong>{order.orderCode ?? order.reference}</strong>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {formatOrderAmount(order.total, order.currency)} ·{" "}
+                  {new Date(order.placed).toLocaleDateString("en-NG", {
+                    timeZone: "Africa/Lagos",
+                    dateStyle: "medium",
+                  })}
+                </p>
+              </div>
               <span className="bg-primary/10 text-primary rounded-full px-3 py-1.5 text-xs font-bold capitalize">
-                {trackingMutation.data.status}
+                {order.fulfilment ?? order.status}
               </span>
             </div>
-
-            <div className="mt-7 grid gap-5">
-              {trackingMutation.data.timeline.map((item) => (
-                <div key={item.status} className="flex gap-4">
+            <h2 className="mt-6 text-lg font-semibold">Getty delivery</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              One delivery for your whole order. Payment status is separate from
+              delivery progress.
+            </p>
+            <ol
+              className="mt-6 grid gap-4 sm:grid-cols-5"
+              aria-label="Whole-order delivery timeline"
+            >
+              {stages.map((stage, index) => (
+                <li key={stage} className="flex gap-3 sm:flex-col">
                   <div
                     className={`grid size-8 shrink-0 place-items-center rounded-full ${
-                      item.completed
+                      stageIndex >= index
                         ? "bg-primary text-white"
                         : "bg-black/5 text-black/30"
                     }`}
                   >
-                    <Check className="size-4" />
+                    <Check className="size-4" aria-hidden />
                   </div>
-
-                  <p className="text-sm font-bold">{item.label}</p>
-                </div>
+                  <div>
+                    <p className="text-sm font-bold capitalize">{stage}</p>
+                    {order.history?.find(
+                      (event) => event.action === `fulfilment-${stage}`
+                    )?.entry && (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {new Date(
+                          order.history.find(
+                            (event) => event.action === `fulfilment-${stage}`
+                          )!.entry
+                        ).toLocaleString("en-NG", {
+                          timeZone: "Africa/Lagos",
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                </li>
               ))}
-            </div>
+            </ol>
+            {order.tracking &&
+              (order.tracking.carrier || order.tracking.reference) && (
+                <p className="mt-6 text-sm">
+                  {order.tracking.carrier
+                    ? `Carrier: ${order.tracking.carrier}`
+                    : ""}
+                  {order.tracking.reference
+                    ? ` · Tracking: ${order.tracking.reference}`
+                    : ""}
+                </p>
+              )}
+            <Link
+              href={`/${session?.user?.role === Role.SUPPLIER ? "supplier" : "customer"}/orders/${encodeURIComponent(order.id)}`}
+              className="text-primary mt-6 inline-flex min-h-11 items-center gap-2 font-semibold"
+            >
+              View order details <ArrowRight className="size-4" aria-hidden />
+            </Link>
           </div>
         )}
       </div>

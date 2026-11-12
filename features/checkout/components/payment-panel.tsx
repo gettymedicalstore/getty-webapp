@@ -3,9 +3,10 @@
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2, CreditCard, RefreshCw } from "lucide-react"
+import { CheckCircle2, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ContentError from "@/components/shared/content-error"
+import { GettyApiError } from "@/lib/api/errors"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { readSession } from "@/features/auth/api/session-store"
 import {
@@ -155,20 +156,17 @@ function PaymentStatus({
       void orderQuery.refetch()
     } catch (e) {
       setError(
-        e instanceof Error
-          ? e.message
-          : "We couldn't start payment. Retry this request or check your order."
+        e instanceof GettyApiError && e.status === 503
+          ? "Online payment is temporarily unavailable. Your order is saved; try again later or contact support."
+          : e instanceof Error
+            ? e.message
+            : "We couldn't start payment. Retry this request or check your order."
       )
       void orderQuery.refetch()
     } finally {
       submitting.current = false
       setBusy(false)
     }
-  }
-  async function check() {
-    setPollStarted(Date.now())
-    await orderQuery.refetch()
-    if (paymentId) await paymentQuery.refetch()
   }
   if (orderQuery.isPending)
     return (
@@ -196,6 +194,18 @@ function PaymentStatus({
     !orderQuery.isFetching && !paymentQuery.isError
       ? hostedPaymentLink(order, payment, clock)
       : null
+  const unsupportedPaymentLink =
+    payment?.kind === "charge" &&
+    payment.status === "pending" &&
+    Boolean(payment.link) &&
+    awaitingPayment(order, clock) &&
+    !link &&
+    !orderQuery.isFetching &&
+    !paymentQuery.isError
+  const preparingPaymentLink =
+    payment?.kind === "charge" &&
+    (payment.status === "created" ||
+      (payment.status === "pending" && !payment.link))
   const canPay =
     !blocking &&
     !(
@@ -210,7 +220,9 @@ function PaymentStatus({
     Math.ceil(((order.expires ? Date.parse(order.expires) : 0) - clock) / 1000)
   )
   const title = closed
-    ? `Order ${order.status}`
+    ? payment?.status === "unknown"
+      ? `Order ${order.status} · payment under review`
+      : `Order ${order.status}`
     : confirmed
       ? "Your order is confirmed"
       : paid
@@ -234,9 +246,6 @@ function PaymentStatus({
         <CreditCard aria-hidden className="text-primary size-9" />
       )}
       <h1 className="mt-5 text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="text-muted-foreground mt-2 text-sm break-all">
-        Order {order.reference}
-      </p>
       <dl className="mt-6 space-y-3 border-y py-5 text-sm">
         <div className="flex justify-between gap-4">
           <dt>Products (tax included)</dt>
@@ -255,17 +264,21 @@ function PaymentStatus({
         {closed
           ? paid
             ? "Payment was received after this order closed. Check your order for refund progress."
-            : "This order is closed. You can review its payment and refund history below."
+            : payment?.status === "unknown"
+              ? "The order’s payment window has ended, but Getty has not confirmed the outcome of this payment attempt. Contact support before placing another order."
+              : "This order is closed. Open the order to review its status and any refunds."
           : confirmed
             ? "We’ve received your order. Follow each item's delivery progress in your orders."
             : payment?.status === "unknown"
-              ? "The payment outcome is not confirmed yet. Check its status again before making another payment."
-              : payment?.status === "created"
-                ? "We’re preparing your payment link. You can leave this page and resume from your orders."
+              ? "Getty has not resolved this payment attempt yet. We can’t safely open checkout or start another charge until its status is confirmed. Refresh this page later, or contact support if this continues."
+              : preparingPaymentLink
+                ? "Getty is preparing your secure payment link. Pay now will appear here when it is ready."
                 : paid
                   ? "Your payment has been verified. We’re waiting for the latest order status."
-                  : payment?.failure ||
-                    "Pay securely with Paystack. Your order is confirmed only after Getty verifies your payment."}
+                  : payment?.failure || null}
+        {payment?.status === "unknown" && payment.failure && (
+          <p className="mt-2">Getty reports: {payment.failure}</p>
+        )}
         {order.status === "pending" && (
           <p className="mt-2">
             {seconds > 0
@@ -277,7 +290,7 @@ function PaymentStatus({
           ["created", "pending", "unknown"].includes(payment.status) &&
           clock - pollStarted > 120000 && (
             <p className="mt-2">
-              Automatic checks have paused. Use Check status to check again.
+              Automatic checks have paused. Refresh this page to check again.
             </p>
           )}
       </div>
@@ -294,6 +307,15 @@ function PaymentStatus({
           We couldn’t check this payment. {paymentQuery.error.message}
         </p>
       )}
+      {unsupportedPaymentLink && (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          This checkout link cannot be opened in Flutterwave test mode. Please
+          contact support before trying again.
+        </p>
+      )}
       <div className="mt-6 flex flex-wrap gap-3">
         {link && (
           <a
@@ -301,7 +323,7 @@ function PaymentStatus({
             href={link}
             referrerPolicy="no-referrer"
           >
-            Continue to payment
+            Pay now
           </a>
         )}
         {canPay && (
@@ -314,15 +336,6 @@ function PaymentStatus({
               : payment
                 ? "Try payment again"
                 : "Pay securely"}
-          </Button>
-        )}
-        {!confirmed && (
-          <Button
-            variant="outline"
-            disabled={orderQuery.isFetching || paymentQuery.isFetching || busy}
-            onClick={() => void check()}
-          >
-            <RefreshCw aria-hidden className="size-4" /> Check status
           </Button>
         )}
         <Link

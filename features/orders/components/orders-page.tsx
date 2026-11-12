@@ -24,6 +24,7 @@ import {
   getOrders,
   orderStatuses,
   itemStatuses,
+  supplyStatuses,
   type OrderDateFilters,
   type OrderSummary,
 } from "../api/order-management"
@@ -53,7 +54,7 @@ export function OrderFilters({
         datesOnly
           ? "xl:grid-cols-[repeat(2,minmax(0,1fr))_auto]"
           : vendor
-            ? "xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+            ? "xl:grid-cols-[repeat(5,minmax(0,1fr))_auto]"
             : "xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]"
       )}
     >
@@ -117,6 +118,28 @@ export function OrderFilters({
           </FormSelect>
         </div>
       )}
+      {vendor && !datesOnly && (
+        <div className="min-w-0">
+          <label
+            className="mb-2 block text-sm font-medium"
+            htmlFor="orders-supply-status"
+          >
+            Supply status
+          </label>
+          <FormSelect
+            id="orders-supply-status"
+            name="supplyStatus"
+            className="form-input h-11"
+          >
+            <option value="">All handovers</option>
+            {supplyStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status[0].toUpperCase() + status.slice(1)}
+              </option>
+            ))}
+          </FormSelect>
+        </div>
+      )}
       <Button
         type="submit"
         variant="outline"
@@ -160,7 +183,7 @@ export default function OrdersPage({
       enableSorting: false,
       cell: ({ row: { original: order } }) => (
         <span className="block max-w-72 min-w-48 leading-6 font-medium break-all text-[#293c30]">
-          {order.reference}
+          {order.orderCode ?? order.reference}
         </span>
       ),
     },
@@ -191,6 +214,25 @@ export default function OrdersPage({
       header: "Status",
       enableSorting: false,
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      accessorKey: "fulfilment",
+      header: "Getty delivery",
+      enableSorting: false,
+      cell: ({ row: { original: order } }) =>
+        order.fulfilment ? (
+          <div>
+            <StatusBadge status={order.fulfilment} />
+            {audience === "vendor" && order.supplyProgress && (
+              <span className="text-muted-foreground mt-1 block text-xs whitespace-nowrap">
+                {order.supplyProgress.received ?? 0} received ·{" "}
+                {order.supplyProgress.supplied ?? 0} handed over
+              </span>
+            )}
+          </div>
+        ) : (
+          "—"
+        ),
     },
     {
       accessorKey: "total",

@@ -85,8 +85,15 @@ try {
     await page
       .getByRole("link", { name: "View Examination Gloves" })
       .getAttribute("href"),
-    `/admin/products/${id}`
+    `/admin/all-products/${id}`
   )
+  await page.getByRole("link", { name: "View Examination Gloves" }).click()
+  await page.waitForURL(`${base}/admin/all-products/${id}`)
+  const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" })
+  await breadcrumb.getByRole("link", { name: "All products" }).waitFor()
+  await breadcrumb.getByRole("link", { name: "All products" }).click()
+  await page.waitForURL(`${base}/admin/all-products`)
+  await page.getByRole("link", { name: "View Examination Gloves" }).waitFor()
   await page.getByRole("button", { name: "Next", exact: true }).click()
   await page.getByRole("link", { name: "View Disposable masks" }).waitFor()
   assert.equal(calls.at(-1).cursor, "42")

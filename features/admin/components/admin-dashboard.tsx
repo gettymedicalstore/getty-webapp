@@ -14,7 +14,6 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react"
-import PageHeading from "@/components/shared/page-heading"
 import ContentError from "@/components/shared/content-error"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -397,25 +396,24 @@ export default function AdminDashboard() {
   })
   return (
     <div className="space-y-6">
-      <PageHeading
-        title="Dashboard"
-        description="An overview of your accounts, catalogue and orders."
-        action={
-          <Button
-            type="button"
-            variant="outline"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-            aria-busy={query.isFetching}
-          >
-            <RotateCcw
-              aria-hidden
-              className={cn("size-4", query.isFetching && "animate-spin")}
-            />
-            Refresh
-          </Button>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm leading-6 text-[#5e6f63]">
+          An overview of your accounts, catalogue and orders.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+          aria-busy={query.isFetching}
+        >
+          <RotateCcw
+            aria-hidden
+            className={cn("size-4", query.isFetching && "animate-spin")}
+          />
+          Refresh
+        </Button>
+      </div>
       {query.isPending ? (
         <div
           role="status"

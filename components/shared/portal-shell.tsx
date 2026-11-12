@@ -53,10 +53,17 @@ export default function PortalShell({
         ? "Vendor workspace"
         : "Customer account"
   const [open, setOpen] = useState(false)
+  const allProductsDetail =
+    role === "admin" && /^\/admin\/all-products\/[^/]+$/.test(path)
   const productDetail =
-    (role === "admin" || role === "supplier") &&
-    /^\/(admin|supplier)\/products\/[^/]+$/.test(path)
+    allProductsDetail ||
+    ((role === "admin" || role === "supplier") &&
+      /^\/(admin|supplier)\/products\/[^/]+$/.test(path))
   const productId = productDetail ? (path.split("/").at(-1) ?? "") : ""
+  const adminOrderDetail =
+    role === "admin" && /^\/admin\/(orders|fulfilment)\/[^/]+$/.test(path)
+  const fulfilmentDetail =
+    adminOrderDetail && path.startsWith("/admin/fulfilment/")
   const productQuery = useQuery({
     queryKey: ["managed-product", productId],
     queryFn: () => getManagedProduct(productId),
@@ -90,17 +97,29 @@ export default function PortalShell({
   const parentHref = featuredCreate
     ? "/admin/featured"
     : productDetail
-      ? `${base}/products`
-      : tenantRoute
-        ? `/admin/${tenantRoute[1]}`
-        : null
+      ? allProductsDetail
+        ? "/admin/all-products"
+        : `${base}/products`
+      : adminOrderDetail
+        ? fulfilmentDetail
+          ? "/admin/fulfilment"
+          : "/admin/orders"
+        : tenantRoute
+          ? `/admin/${tenantRoute[1]}`
+          : null
   const parentLabel = featuredCreate
     ? "Featured products"
     : productDetail
-      ? "Products"
-      : tenantRoute?.[1] === "customers"
-        ? "Customers"
-        : "Vendors"
+      ? allProductsDetail
+        ? "All products"
+        : "Products"
+      : adminOrderDetail
+        ? fulfilmentDetail
+          ? "Order fulfilment"
+          : "Orders"
+        : tenantRoute?.[1] === "customers"
+          ? "Customers"
+          : "Vendors"
   const searchAction = role === "customer" ? "/products" : `${base}/products`
   const brand = (
     <Link

@@ -87,6 +87,29 @@ const page = {
   previousCursor: 0,
 }
 
+test("order details preserve the delivery estimate and service returned after checkout", () => {
+  const parsed = api.orderDetailSchema.parse({
+    ...detail,
+    orderCode: "2611-MY5M",
+    fulfilment: "placed",
+    delivery: { ...detail.delivery, service: "standard" },
+    deliveryQuote: {
+      name: "Abuja standard — provisional",
+      service: "standard",
+      earliest: "2026-11-14",
+      latest: "2026-11-16",
+      estimateOnly: true,
+      estimatedMeasurements: true,
+    },
+  })
+  assert.equal(parsed.orderCode, "2611-MY5M")
+  assert.equal(parsed.fulfilment, "placed")
+  assert.equal(parsed.delivery.service, "standard")
+  assert.equal(parsed.deliveryQuote.earliest, "2026-11-14")
+  assert.equal(parsed.deliveryQuote.latest, "2026-11-16")
+  assert.equal(parsed.deliveryQuote.estimateOnly, true)
+})
+
 test("order details retain the supplied inclusive tax breakdown and optional fields for both audiences", async (t) => {
   const supplied = {
     ...detail,
@@ -242,9 +265,10 @@ test("date filters reject invalid and reversed dates and span year boundaries co
     through: "2026-10-01",
     status: "",
     itemStatus: "",
+    supplyStatus: "",
   })
 })
-test("line actions use order-line IDs and current versions, with the caller's stable token", async () => {
+test("legacy cancellation uses order-line IDs and current versions, with the caller's stable token", async () => {
   const original = data.apiData,
     calls = []
   data.apiData = async (...args) => {
@@ -255,9 +279,8 @@ test("line actions use order-line IDs and current versions, with the caller's st
     const payload = {
       token,
       version: 3,
-      action: "ship",
-      carrier: "DHL",
-      tracking: "TRACK-10",
+      action: "cancel",
+      reason: "Not available",
     }
     await api.actOnOrderLine("vendor", orderId, lineId, payload)
     await api.actOnOrderLine("vendor", orderId, lineId, payload)
@@ -267,17 +290,18 @@ test("line actions use order-line IDs and current versions, with the caller's st
     )
     assert.deepEqual(JSON.parse(calls[0][1].body), payload)
     assert.equal(calls[0][1].body, calls[1][1].body)
-    await assert.rejects(() =>
-      api.actOnOrderLine("customer", orderId, lineId, payload)
+    await api.actOnOrderLine("customer", orderId, lineId, payload)
+    assert.equal(
+      calls[2][0],
+      `/getty/v1/order/${orderId}/items/${lineId}/actions`
     )
-    assert.equal(calls.length, 2)
     await api.cancelOrder(orderId, {
       token,
       version: 2,
       reason: "No longer needed",
     })
-    assert.equal(calls[2][0], `/getty/v1/order/${orderId}/cancel`)
-    assert.deepEqual(JSON.parse(calls[2][1].body), {
+    assert.equal(calls[3][0], `/getty/v1/order/${orderId}/cancel`)
+    assert.deepEqual(JSON.parse(calls[3][1].body), {
       token,
       version: 2,
       reason: "No longer needed",
@@ -286,7 +310,7 @@ test("line actions use order-line IDs and current versions, with the caller's st
     data.apiData = original
   }
 })
-test("ship, cancellation and return actions validate required fields before a mutation", () => {
+test("legacy shipping is rejected and cancellation and return actions validate required fields", () => {
   assert.throws(() =>
     api.actionSchema.parse({ token, version: 1, action: "ship" })
   )
@@ -325,10 +349,23 @@ test("available actions honour seller versus buyer, payment state, line state an
     api.availableLineActions("vendor", { ...detail, status: "pending" }, line),
     ["cancel"]
   )
-  assert.deepEqual(api.availableLineActions("vendor", detail, line), [
-    "accept",
-    "cancel",
-  ])
+  assert.deepEqual(api.availableLineActions("vendor", detail, line), ["cancel"])
+  assert.deepEqual(
+    api.availableLineActions(
+      "vendor",
+      { ...detail, fulfilment: "preparing" },
+      { ...line, supply: { status: "supplied" } }
+    ),
+    []
+  )
+  assert.deepEqual(
+    api.availableLineActions(
+      "customer",
+      { ...detail, status: "shipped", fulfilment: "dispatched" },
+      line
+    ),
+    []
+  )
   assert.deepEqual(
     api.availableLineActions("customer", detail, {
       ...line,
@@ -341,7 +378,7 @@ test("available actions honour seller versus buyer, payment state, line state an
       ...line,
       status: "shipped",
     }),
-    ["deliver"]
+    []
   )
   assert.deepEqual(
     api.availableLineActions("vendor", detail, {

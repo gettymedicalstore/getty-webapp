@@ -52,6 +52,12 @@ export default function ProductWorkspace({
 }) {
   const params = useSearchParams()
   const pathname = usePathname()
+  const productListHref =
+    workspace === "admin" && pathname.startsWith("/admin/all-products/")
+      ? "/admin/all-products"
+      : `/${workspace}/products`
+  const productListLabel =
+    productListHref === "/admin/all-products" ? "all products" : "products"
   const session = useAuthSession()
   const [approvalOpen, setApprovalOpen] = useState(false)
   const [submissionOpen, setSubmissionOpen] = useState(false)
@@ -69,11 +75,11 @@ export default function ProductWorkspace({
     return (
       <div className="space-y-5">
         <Link
-          href={`/${workspace}/products`}
+          href={productListHref}
           className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#426653]"
         >
           <ArrowLeft aria-hidden className="size-4" />
-          Back to products
+          Back to {productListLabel}
         </Link>
         <ContentError
           title="We couldn’t load this product"

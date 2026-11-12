@@ -1,9 +1,10 @@
 "use client"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useFormContext, useWatch } from "react-hook-form"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, LockKeyhole, Truck } from "lucide-react"
+import { ArrowLeft, Truck } from "lucide-react"
 import AuthBoundary from "@/features/auth/components/auth-boundary"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { readSession } from "@/features/auth/api/session-store"
@@ -12,15 +13,18 @@ import { CartSkeleton } from "@/components/shared/loading-skeletons"
 import ContentError from "@/components/shared/content-error"
 import EmptyCart from "@/features/cart/components/store/empty-cart"
 import { Button } from "@/components/ui/button"
+import PhoneNumberField from "@/components/shared/form/signup-phone-field"
+import parsePhoneNumber from "libphonenumber-js/min"
 import {
   ValidatedForm,
   FormInputField,
+  FormSelect,
   FormTextarea,
 } from "@/components/shared/form/validated-form"
 import { GettyApiError } from "@/lib/api/errors"
 import {
   checkoutSchema,
-  deliverySchema,
+  deliveryFromCheckoutForm,
   type CheckoutFormSchema,
 } from "../../schemas/checkout-schema"
 import {
@@ -32,11 +36,78 @@ import {
 } from "../../api/checkout"
 import {
   forgetCheckout,
+  noteCheckoutIssue,
   readRecovery,
   rememberCheckout,
   rememberOrder,
 } from "../../api/recovery"
 import PaymentPanel from "../payment-panel"
+import { nigeriaStates } from "../../nigeria-states"
+
+function formatDeliveryDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en-NG", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(date)
+}
+
+function DeliveryStateField() {
+  const country = useWatch({ name: "phoneCountry" })
+  const normalizedCountry =
+    typeof country === "string" ? country.trim().toUpperCase() : ""
+  const previousCountry = useRef(normalizedCountry)
+  const { setValue } = useFormContext()
+  useEffect(() => {
+    if (
+      previousCountry.current &&
+      previousCountry.current !== normalizedCountry
+    )
+      setValue("state", "")
+    previousCountry.current = normalizedCountry
+  }, [normalizedCountry, setValue])
+  if (normalizedCountry && normalizedCountry !== "NG")
+    return (
+      <FormInputField
+        name="state"
+        label="State"
+        autoComplete="shipping address-level1"
+        required
+      />
+    )
+
+  return (
+    <div className="space-y-2">
+      <label
+        htmlFor="checkout-state"
+        className="block text-sm font-medium text-[#414651]"
+      >
+        State{" "}
+        <span aria-hidden className="text-destructive">
+          *
+        </span>
+      </label>
+      <FormSelect
+        id="checkout-state"
+        name="state"
+        className="form-input h-13 border-[#dce2de] bg-white text-sm"
+        autoComplete="shipping address-level1"
+        required
+      >
+        <option value="">Select state or FCT</option>
+        {nigeriaStates.map((state) => (
+          <option key={state} value={state}>
+            {state === "FCT" ? "Federal Capital Territory (FCT)" : state}
+          </option>
+        ))}
+      </FormSelect>
+    </div>
+  )
+}
 
 export default function CheckoutPageContent() {
   const user = useAuthSession().data?.user
@@ -61,10 +132,10 @@ function CheckoutStatus() {
   const [formValues, setFormValues] = useState<CheckoutFormSchema>({
     name: user.name,
     phone: user.phone ?? "",
+    phoneCountry: parsePhoneNumber(user.phone ?? "")?.country ?? "NG",
     address: "",
     city: "",
     state: "",
-    country: "NG",
     postcode: null,
     notes: "",
   })
@@ -81,7 +152,7 @@ function CheckoutStatus() {
     setError("")
     setFormValues(values)
     try {
-      const data = await previewCheckout(deliverySchema.parse(values))
+      const data = await previewCheckout(deliveryFromCheckoutForm(values))
       if (readSession().user?.id === user.id)
         setPreview({ data, signature, notes: values.notes || null })
     } catch (e) {
@@ -126,13 +197,19 @@ function CheckoutStatus() {
         setPreview(undefined)
         void state.refetch()
       }
-      setError(
-        definitive
-          ? `${e.message} Review your bag and request an updated delivery total before placing the order again.`
-          : e instanceof Error
-            ? e.message
-            : "We couldn’t confirm your order. Retry the saved request to avoid placing it twice."
-      )
+      const message = definitive
+        ? `${e.message} Review your bag and request an updated delivery total before placing the order again.`
+        : e instanceof Error
+          ? e.message
+          : "We couldn’t confirm your order. Retry the saved request to avoid placing it twice."
+      if (!definitive) {
+        try {
+          setRecovery(noteCheckoutIssue(user.id, message))
+        } catch {
+          // The current error remains visible even if storage is unavailable.
+        }
+      }
+      setError(message)
     } finally {
       sending.current = false
       setBusy(false)
@@ -150,19 +227,23 @@ function CheckoutStatus() {
     return (
       <div className="site-container py-12">
         <section className="mx-auto max-w-2xl rounded-2xl border bg-white p-6 sm:p-8">
-          <h1 className="text-2xl font-semibold">Check your order request</h1>
+          <h1 className="text-2xl font-semibold">Finish checking your order</h1>
           <p className="text-muted-foreground mt-3 text-sm leading-6">
-            Your last order request is saved, but its outcome has not been
-            confirmed. Retry the same request to recover the order safely.
+            We saved your checkout request before sending it, but Getty has not
+            confirmed the result. Retry the same request to recover your order
+            safely. This will not place a second order for the same request.
           </p>
           <p className="mt-4 text-sm">
             Deliver to {recovery.command.delivery.name},{" "}
             {recovery.command.delivery.address},{" "}
             {recovery.command.delivery.city}.
           </p>
-          {error && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
-              {error}
+          {(error || recovery.issue) && (
+            <p
+              role="alert"
+              className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"
+            >
+              {error || recovery.issue}
             </p>
           )}
           <div className="mt-6 flex flex-wrap gap-3">
@@ -170,7 +251,7 @@ function CheckoutStatus() {
               disabled={busy}
               onClick={() => void submit(recovery.command)}
             >
-              {busy ? "Checking order…" : "Retry saved order request"}
+              {busy ? "Checking order…" : "Check saved order request"}
             </Button>
             <Link
               href="/customer/orders"
@@ -321,12 +402,9 @@ function CheckoutStatus() {
                   autoComplete="shipping name"
                   required
                 />
-                <FormInputField
-                  name="phone"
-                  label="Phone number"
-                  type="tel"
-                  autoComplete="shipping tel"
-                  required
+                <PhoneNumberField
+                  countryName="phoneCountry"
+                  autoComplete="shipping tel-national"
                 />
                 <FormInputField
                   name="address"
@@ -341,35 +419,28 @@ function CheckoutStatus() {
                     autoComplete="shipping address-level2"
                     required
                   />
-                  <FormInputField
-                    name="state"
-                    label="State / FCT"
-                    autoComplete="shipping address-level1"
-                    required
-                  />
+                  <DeliveryStateField />
                 </div>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <FormInputField
-                    name="country"
-                    label="Country code"
-                    hint="Two letters, for example NG for Nigeria."
-                    autoComplete="shipping country"
-                    required
-                  />
-                  <FormInputField
-                    name="postcode"
-                    label="Postal code (optional)"
-                    autoComplete="shipping postal-code"
-                  />
-                </div>
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>Delivery note (optional)</span>
+                <FormInputField
+                  name="postcode"
+                  label="Postal code (optional)"
+                  autoComplete="shipping postal-code"
+                />
+                <div className="space-y-2">
+                  <label
+                    htmlFor="checkout-delivery-note"
+                    className="block text-sm font-medium text-[#414651]"
+                  >
+                    Delivery note (optional)
+                  </label>
                   <FormTextarea
+                    id="checkout-delivery-note"
                     name="notes"
                     rows={3}
                     placeholder="Directions or instructions for your delivery"
+                    className="focus-visible:border-primary focus-visible:ring-primary/10 min-h-28 resize-y rounded-lg border-[#dce2de] bg-white px-3.5 py-3 text-base font-normal shadow-none transition-[border-color,box-shadow] placeholder:text-[#8b938e] hover:border-[#bac7be] focus-visible:ring-3 sm:text-sm"
                   />
-                </label>
+                </div>
                 <Button
                   type="submit"
                   disabled={!ready || busy}
@@ -430,6 +501,25 @@ function CheckoutStatus() {
                   : "Awaiting address"}
               </dd>
             </div>
+            {validPreview && preview.data.deliveryQuote && (
+              <div className="rounded-lg bg-[#f6f9f3] px-4 py-3 text-xs leading-5 text-[#526459]">
+                {preview.data.deliveryQuote.earliest &&
+                  preview.data.deliveryQuote.latest && (
+                    <p>
+                      Estimated delivery:{" "}
+                      {formatDeliveryDate(preview.data.deliveryQuote.earliest)}{" "}
+                      – {formatDeliveryDate(preview.data.deliveryQuote.latest)}
+                    </p>
+                  )}
+                {preview.data.deliveryQuote.estimatedMeasurements && (
+                  <p>Shipping is based on estimated package measurements.</p>
+                )}
+                {preview.data.deliveryQuote.estimateOnly &&
+                  !preview.data.deliveryQuote.estimatedMeasurements && (
+                    <p>This delivery estimate is provisional.</p>
+                  )}
+              </div>
+            )}
             {validPreview && (
               <div className="flex justify-between gap-4 border-t pt-4 text-lg font-semibold">
                 <dt>Total</dt>
@@ -455,11 +545,6 @@ function CheckoutStatus() {
               Update delivery total
             </Button>
           )}
-          <p className="text-muted-foreground mt-5 flex gap-2 text-xs leading-5">
-            <LockKeyhole aria-hidden className="mt-0.5 size-4 shrink-0" />{" "}
-            Payment is completed securely with Paystack after your order is
-            placed.
-          </p>
         </aside>
       </div>
     </div>

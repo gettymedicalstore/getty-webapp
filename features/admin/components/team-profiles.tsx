@@ -88,6 +88,55 @@ export default function TeamProfiles() {
     }
   }
 
+  function selectProfile(
+    profile: TeamProfile,
+    action: "edit" | "delete",
+    element: HTMLButtonElement
+  ) {
+    trigger.current = element
+    setError("")
+    setSelected({ profile, action })
+  }
+
+  const paginationControls = (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+      <p className="text-muted-foreground text-sm">
+        {query.data?.totalRecords ?? 0}{" "}
+        {query.data?.totalRecords === 1 ? "team member" : "team members"}
+      </p>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!query.data?.isPrevious || query.isFetching}
+          onClick={() =>
+            setFilter((current) => ({
+              ...current,
+              cursor: query.data!.previous,
+              navigation: "previous",
+            }))
+          }
+        >
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!query.data?.isNext || query.isFetching}
+          onClick={() =>
+            setFilter((current) => ({
+              ...current,
+              cursor: query.data!.next,
+              navigation: "next",
+            }))
+          }
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  )
+
   const columns: ColumnDef<TeamProfile, unknown>[] = [
     {
       accessorKey: "name",
@@ -149,11 +198,9 @@ export default function TeamProfiles() {
               type="button"
               variant="ghost"
               className={action === "delete" ? "text-red-700" : "text-primary"}
-              onClick={(event) => {
-                trigger.current = event.currentTarget
-                setError("")
-                setSelected({ profile: row.original, action })
-              }}
+              onClick={(event) =>
+                selectProfile(row.original, action, event.currentTarget)
+              }
             >
               {action === "edit" ? "Edit" : "Delete"}
             </Button>
@@ -165,21 +212,13 @@ export default function TeamProfiles() {
 
   return (
     <section
-      className="min-w-0 space-y-5 border-t border-[#e0e8e2] pt-7"
+      className="min-w-0 space-y-5"
       aria-labelledby="team-profiles-heading"
     >
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h2
-            id="team-profiles-heading"
-            className="text-xl font-semibold text-[#263e30]"
-          >
-            Organisation team
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Manage the people who have access to your organisation’s workspace.
-          </p>
-        </div>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Manage the people who have access to your organisation’s workspace.
+        </p>
         <CreateAccount kind="profile" />
       </div>
       <ValidatedForm
@@ -200,10 +239,8 @@ export default function TeamProfiles() {
           label="Search team members"
           type="search"
           placeholder="Name, email or phone"
+          hint="Enter at least four characters to filter the list."
         />
-        <p className="text-muted-foreground mt-2 text-xs">
-          Enter at least four characters to filter the list.
-        </p>
       </ValidatedForm>
       {query.isError ? (
         <ContentError
@@ -212,54 +249,105 @@ export default function TeamProfiles() {
           onRetry={() => void query.refetch()}
         />
       ) : (
-        <AdminDataTable
-          label="Team profiles"
-          columns={columns}
-          data={query.data?.records ?? []}
-          total={query.data?.totalRecords ?? 0}
-          pageCount={1}
-          pagination={{ pageIndex: 0, pageSize: 20 }}
-          onPaginationChange={() => {}}
-          loading={query.isPending}
-          emptyState={<p>No team profiles match your search.</p>}
-          paginationControls={
-            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-              <p className="text-muted-foreground text-sm">
-                {query.data?.totalRecords ?? 0} team members
+        <>
+          <div className="space-y-3 md:hidden">
+            {query.isPending ? (
+              <p className="rounded-xl border bg-white p-5 text-sm text-[#5e6f63]">
+                Loading team members…
               </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!query.data?.isPrevious || query.isFetching}
-                  onClick={() =>
-                    setFilter((current) => ({
-                      ...current,
-                      cursor: query.data!.previous,
-                      navigation: "previous",
-                    }))
-                  }
+            ) : query.data?.records.length ? (
+              query.data.records.map((profile) => (
+                <article
+                  key={profile.id}
+                  className="overflow-hidden rounded-xl border border-[#e3e8e5] bg-white"
                 >
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!query.data?.isNext || query.isFetching}
-                  onClick={() =>
-                    setFilter((current) => ({
-                      ...current,
-                      cursor: query.data!.next,
-                      navigation: "next",
-                    }))
-                  }
-                >
-                  Next
-                </Button>
-              </div>
+                  <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold break-words text-[#293c30]">
+                        {profile.name}
+                      </h3>
+                      <p className="mt-1 text-sm break-all text-[#5d6a61]">
+                        {profile.email}
+                      </p>
+                      {profile.phone && (
+                        <p className="mt-1 text-sm text-[#5d6a61]">
+                          {profile.phone}
+                        </p>
+                      )}
+                    </div>
+                    <StatusBadge status={profile.status} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 border-t border-[#eff2ef] px-4 py-3 text-xs">
+                    <div>
+                      <p className="text-[#708074]">Role</p>
+                      <p className="mt-1 font-medium text-[#34473a] capitalize">
+                        {profile.role === "admin"
+                          ? "Administrator"
+                          : profile.role}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#708074]">Account access</p>
+                      <p className="mt-1 text-[#34473a]">
+                        {profile.emailVerified
+                          ? "Email verified"
+                          : "Email unverified"}
+                      </p>
+                      <p className="text-[#34473a]">
+                        {profile.phoneVerified
+                          ? "Phone verified"
+                          : "Phone unverified"}
+                      </p>
+                      {profile.reset && (
+                        <p className="text-[#34473a]">
+                          Password change required
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 border-t border-[#eff2ef] px-3 py-2">
+                    {(["edit", "delete"] as const).map((action) => (
+                      <Button
+                        key={action}
+                        type="button"
+                        variant="ghost"
+                        className={
+                          action === "delete" ? "text-red-700" : "text-primary"
+                        }
+                        onClick={(event) =>
+                          selectProfile(profile, action, event.currentTarget)
+                        }
+                      >
+                        {action === "edit" ? "Edit" : "Delete"}
+                      </Button>
+                    ))}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-xl border bg-white p-5 text-sm text-[#5e6f63]">
+                No team profiles match your search.
+              </p>
+            )}
+            <div className="rounded-xl border border-[#e3e8e5] bg-white">
+              {paginationControls}
             </div>
-          }
-        />
+          </div>
+          <div className="hidden md:block">
+            <AdminDataTable
+              label="Team profiles"
+              columns={columns}
+              data={query.data?.records ?? []}
+              total={query.data?.totalRecords ?? 0}
+              pageCount={1}
+              pagination={{ pageIndex: 0, pageSize: 20 }}
+              onPaginationChange={() => {}}
+              loading={query.isPending}
+              emptyState={<p>No team profiles match your search.</p>}
+              paginationControls={paginationControls}
+            />
+          </div>
+        </>
       )}
       <Dialog
         open={Boolean(selected)}

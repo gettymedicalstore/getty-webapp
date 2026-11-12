@@ -20,6 +20,21 @@ import type {
 import type { Category } from "@/features/categories/types/category"
 import { catalogPricing } from "../utils/product-pricing"
 const placeholder = "/images/product-placeholder.svg"
+
+// The public category response has no image field. Use existing store artwork
+// until category images are available from the catalogue API.
+function categoryArtwork(name: string, parentName = ""): string {
+  const label = `${name} ${parentName}`.toLowerCase()
+  if (/dental|oral/.test(label)) return "/images/10.webp"
+  if (/diagnos|imaging|laborator|monitor/.test(label)) return "/images/1.webp"
+  if (/steriliz|disinfect|infection/.test(label)) return "/images/21.webp"
+  if (/operator|surgic|theatre/.test(label)) return "/images/20.webp"
+  if (/pharmac|medicine|medication|drug/.test(label)) return "/images/18.webp"
+  if (/consumable|glove|mask|protective/.test(label)) return "/images/21.webp"
+  if (/dress|wound/.test(label)) return "/images/12.webp"
+  if (/wellness|personal care|supplement/.test(label)) return "/images/17.webp"
+  return "/images/6.webp"
+}
 export const publicSlug = (name: string, id: string) =>
   `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${id}`
 export async function getProductThumbnail(id: string): Promise<string | null> {
@@ -70,15 +85,19 @@ export async function getLiveCategories(): Promise<Category[]> {
     throw new BackendError("The categories response is incomplete.")
   return parsed.data.data
     .flatMap((c) => [
-      c,
-      ...c.subcategories.map((sub) => ({ ...sub, parentId: c.id })),
+      { ...c, image: categoryArtwork(c.name) },
+      ...c.subcategories.map((sub) => ({
+        ...sub,
+        parentId: c.id,
+        image: categoryArtwork(sub.name, c.name),
+      })),
     ])
     .map((c) => ({
       id: c.id,
       name: c.name,
       slug: publicSlug(c.name, c.id),
       description: c.description ?? "",
-      image: placeholder,
+      image: c.image,
       active: true,
       productCount: 0,
       countKnown: false,

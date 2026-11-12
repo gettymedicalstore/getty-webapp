@@ -20,9 +20,6 @@ export const itemStatuses = [
   "returned",
 ] as const
 export const actions = [
-  "accept",
-  "ship",
-  "deliver",
   "cancel",
   "request-return",
   "approve-return",
@@ -31,11 +28,49 @@ export const actions = [
 ] as const
 export type OrderAction = (typeof actions)[number]
 const money = z.number().finite().nonnegative()
+export const fulfilmentStatuses = [
+  "placed",
+  "preparing",
+  "ready",
+  "dispatched",
+  "delivered",
+  "cancelled",
+  "expired",
+] as const
+export const supplyStatuses = [
+  "pending",
+  "accepted",
+  "supplied",
+  "received",
+  "cancelled",
+] as const
+export const supplySchema = z.object({
+  status: z.enum(supplyStatuses),
+  reference: z.string().nullish(),
+  updated: z.string().nullish(),
+})
+export const trackingSchema = z.object({
+  carrier: z.string().nullish(),
+  reference: z.string().nullish(),
+  dispatched: z.string().nullish(),
+  recipient: z.string().nullish(),
+  delivered: z.string().nullish(),
+})
 export const orderSummarySchema = z.object({
   id: z.string().min(1),
   reference: z.string(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   status: z.enum(orderStatuses),
+  fulfilment: z.enum(fulfilmentStatuses).optional(),
+  orderCode: z.string().optional(),
+  supplyProgress: z
+    .object({
+      pending: z.number().int().nonnegative().optional(),
+      accepted: z.number().int().nonnegative().optional(),
+      supplied: z.number().int().nonnegative().optional(),
+      received: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
   placed: z.string(),
   total: money,
   cursor: z.number().int().nonnegative().optional(),
@@ -86,6 +121,7 @@ export const orderLineSchema = z.object({
   shipping: money.optional(),
   commission: money.optional(),
   status: z.enum(itemStatuses),
+  supply: supplySchema.optional(),
   version: z.number().int().positive(),
   tracking: z
     .object({
@@ -112,20 +148,33 @@ export const orderPaymentSchema = z.object({
   settled: z.string().nullish(),
   method: z.string().nullish(),
 })
+export const orderDeliveryQuoteSchema = z.object({
+  name: z.string().optional(),
+  service: z.string().optional(),
+  earliest: z.string().nullish(),
+  latest: z.string().nullish(),
+  estimateOnly: z.boolean().optional(),
+  estimatedMeasurements: z.boolean().optional(),
+})
 export const orderDetailSchema = orderSummarySchema.extend({
   version: z.number().int().positive().optional(),
   modified: z.string().nullish(),
   expires: z.string().nullish(),
   notes: z.string().nullish(),
-  delivery: z.object({
-    name: z.string(),
-    phone: z.string(),
-    address: z.string(),
-    city: z.string(),
-    state: z.string(),
-    country: z.string(),
-    postcode: z.string().nullish(),
-  }),
+  delivery: z
+    .object({
+      name: z.string(),
+      phone: z.string(),
+      address: z.string(),
+      city: z.string(),
+      state: z.string(),
+      country: z.string(),
+      service: z.string().optional(),
+      postcode: z.string().nullish(),
+    })
+    .optional(),
+  deliveryQuote: orderDeliveryQuoteSchema.nullish(),
+  tracking: trackingSchema.optional(),
   items: z.array(orderLineSchema),
   payments: z.array(orderPaymentSchema).optional(),
   history: z
@@ -138,6 +187,15 @@ export const orderDetailSchema = orderSummarySchema.extend({
         after: z.string().nullish(),
         reason: z.string().nullish(),
         entry: z.string(),
+        actor: z
+          .union([
+            z.string(),
+            z.object({
+              name: z.string().optional(),
+              id: z.string().optional(),
+            }),
+          ])
+          .nullish(),
       })
     )
     .optional(),
@@ -152,6 +210,7 @@ export const dateFiltersSchema = z
     through: z.iso.date("Choose a valid end date."),
     status: z.enum(["", ...orderStatuses]),
     itemStatus: z.enum(["", ...itemStatuses]),
+    supplyStatus: z.enum(["", ...supplyStatuses]).optional(),
   })
   .refine(
     (value) =>
@@ -176,6 +235,7 @@ export function defaultOrderFilters(now = new Date()): OrderDateFilters {
     through: today,
     status: "",
     itemStatus: "",
+    supplyStatus: "",
   }
 }
 /** Dates in the workspace are Lagos calendar days; the API end boundary is exclusive. */
@@ -203,6 +263,8 @@ export async function getOrders(
   if (filters.status) q.set("status", filters.status)
   if (audience === "vendor" && filters.itemStatus)
     q.set("itemStatus", filters.itemStatus)
+  if (audience === "vendor" && filters.supplyStatus)
+    q.set("supplyStatus", filters.supplyStatus)
   return orderPageSchema.parse(
     await apiData(
       `/getty/v1/order${audience === "vendor" ? "/vendor" : ""}?${q}`
@@ -222,8 +284,6 @@ export const actionSchema = z
     version: z.number().int().positive(),
     action: z.enum(actions),
     reason: z.string().trim().max(1000).optional(),
-    carrier: z.string().trim().max(100).optional(),
-    tracking: z.string().trim().max(200).optional(),
     restock: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
@@ -236,14 +296,6 @@ export const actionSchema = z
         path: ["reason"],
         message: "Enter a reason for this action.",
       })
-    if (value.action === "ship")
-      for (const key of ["carrier", "tracking"] as const)
-        if (!value[key])
-          ctx.addIssue({
-            code: "custom",
-            path: [key],
-            message: `Enter the ${key === "carrier" ? "delivery carrier" : "tracking number"}.`,
-          })
     if (value.action === "receive-return" && value.restock === undefined)
       ctx.addIssue({
         code: "custom",
@@ -261,7 +313,7 @@ export async function actOnOrderLine(
   const body = actionSchema.parse(input)
   if (
     audience === "customer" &&
-    !["deliver", "cancel", "request-return"].includes(body.action)
+    !["cancel", "request-return"].includes(body.action)
   )
     throw new Error("This action is only available to the seller.")
   return orderDetailSchema.parse(
@@ -297,8 +349,12 @@ export function availableLineActions(
 ): OrderAction[] {
   if (["cancelled", "expired"].includes(order.status)) return []
   if (audience === "customer") {
-    if (line.status === "pending") return ["cancel"]
-    if (line.status === "shipped") return ["deliver"]
+    if (
+      line.status === "pending" &&
+      ["pending", "confirmed"].includes(order.status) &&
+      (!order.fulfilment || order.fulfilment === "placed")
+    )
+      return ["cancel"]
     if (
       line.status === "delivered" &&
       line.returnstate === "none" &&
@@ -309,9 +365,19 @@ export function availableLineActions(
       return ["request-return"]
     return []
   }
-  if (line.status === "pending")
-    return order.status === "pending" ? ["cancel"] : ["accept", "cancel"]
-  if (line.status === "accepted") return ["ship", "cancel"]
+  if (
+    line.status === "pending" &&
+    line.supply?.status !== "supplied" &&
+    line.supply?.status !== "received" &&
+    !["dispatched", "delivered"].includes(order.fulfilment ?? "")
+  )
+    return ["cancel"]
+  if (
+    line.status === "accepted" &&
+    line.supply?.status !== "supplied" &&
+    line.supply?.status !== "received"
+  )
+    return ["cancel"]
   if (line.returnstate === "requested")
     return ["approve-return", "reject-return"]
   if (line.returnstate === "approved") return ["receive-return"]

@@ -1,7 +1,6 @@
 "use client"
 import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import Link from "next/link"
 import { toast } from "sonner"
 import { syncSession } from "@/features/auth/api/session-store"
 import { currentSession } from "@/features/auth/api/refresh-session"
@@ -93,12 +92,6 @@ export default function PaymentRecoveryPage() {
   }
   return (
     <div className="min-w-0 space-y-6">
-      <Link
-        href="/admin/orders"
-        className="text-primary inline-flex min-h-11 items-center text-sm font-medium"
-      >
-        ← Back to orders
-      </Link>
       <PageHeading
         title="Payment recovery"
         description="Review failed or uncertain payments. Provider verification determines the final payment status."

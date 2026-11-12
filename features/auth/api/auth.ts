@@ -5,6 +5,7 @@ import { clearSession, saveSession, readSession } from "./session-store"
 import { sendGettyRequest, unwrapGettyResponse } from "@/lib/api/transport"
 import type { GettyUser } from "../types/session"
 import { SessionTokensSchema } from "../schemas/token-schema"
+import { clearRecovery } from "@/features/checkout/api/recovery"
 const loginResponse = z.object({
   status: z.literal(200),
   success: z.literal(true),
@@ -56,6 +57,7 @@ export async function login(email: string, password: string) {
 }
 export async function logout() {
   const session = readSession()
+  if (session.user) clearRecovery(session.user.id)
   clearSession()
   if (session.user)
     unwrapGettyResponse(

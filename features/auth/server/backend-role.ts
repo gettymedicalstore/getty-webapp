@@ -7,7 +7,10 @@ export function backendRole(type?: string, role?: string): Role {
     profile = role?.trim().toLowerCase()
   if (tenant === "consumer" || tenant === "customer") return Role.CUSTOMER
   if (tenant === "vendor" || tenant === "supplier") return Role.SUPPLIER
-  if (tenant === "support" && ["admin", "superadmin"].includes(profile ?? ""))
+  if (
+    tenant === "support" &&
+    ["operations", "admin", "superadmin"].includes(profile ?? "")
+  )
     return Role.ADMIN
   if (["supplier", "vendor"].includes(profile ?? "")) return Role.SUPPLIER
   return Role.CUSTOMER

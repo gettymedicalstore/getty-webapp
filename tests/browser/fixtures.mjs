@@ -40,6 +40,123 @@ const variant = {
   unitsPerPack: 1,
   minimumOrderQuantity: 1,
 }
+const order = {
+  id,
+  reference: `G-${id}`,
+  currency: "NGN",
+  status: "confirmed",
+  fulfilment: "preparing",
+  orderCode: "2610-K7P4",
+  placed: "2026-10-15T10:30:00+01:00",
+  total: 403000,
+  subtotal: 400000,
+  discount: 0,
+  tax: 27906.98,
+  shipping: 3000,
+  cursor: 1,
+}
+export const orderDetail = {
+  ...order,
+  version: 1,
+  modified: "2026-10-15T10:32:00+01:00",
+  expires: null,
+  notes: "Please call on arrival.",
+  delivery: {
+    name: "Clinical Care Procurement",
+    phone: "+2348000000000",
+    address: "12 Medical Road",
+    city: "Abuja",
+    state: "Federal Capital Territory",
+    country: "NG",
+    postcode: "900001",
+  },
+  items: [
+    {
+      id: "10000000-0000-4000-8000-000000000005",
+      seller: id,
+      product: id,
+      variant: id,
+      name: product.name,
+      sku: "EXAM-100",
+      options: {},
+      unit: "piece",
+      pack: 1,
+      quantity: 1,
+      price: 400000,
+      total: 403000,
+      discount: 0,
+      tax: 27906.98,
+      shipping: 3000,
+      status: "pending",
+      supply: {
+        status: "supplied",
+        reference: "HANDOVER-1",
+        updated: "2026-10-15T11:00:00+01:00",
+      },
+      version: 1,
+      tracking: {},
+      received: null,
+      returnstate: "none",
+    },
+  ],
+  payments: [
+    {
+      id: "10000000-0000-4000-8000-000000000006",
+      kind: "charge",
+      status: "succeeded",
+      amount: 403000,
+      currency: "NGN",
+      settled: "2026-10-15T10:32:00+01:00",
+      method: null,
+    },
+  ],
+  history: [
+    {
+      id: "10000000-0000-4000-8000-000000000007",
+      item: null,
+      action: "placed",
+      before: "draft",
+      after: "pending",
+      reason: null,
+      entry: "2026-10-15T10:30:00+01:00",
+    },
+  ],
+}
+export const operationsDetail = {
+  id,
+  orderCode: order.orderCode,
+  status: "processing",
+  fulfilment: "preparing",
+  version: 3,
+  placed: order.placed,
+  currency: "NGN",
+  total: order.total,
+  subtotal: orderDetail.subtotal,
+  shipping: orderDetail.shipping,
+  tax: orderDetail.tax,
+  discount: orderDetail.discount,
+  notes: orderDetail.notes,
+  payments: orderDetail.payments,
+  delivery: orderDetail.delivery,
+  tracking: {},
+  items: [
+    {
+      id: orderDetail.items[0].id,
+      seller: id,
+      name: product.name,
+      variant: id,
+      quantity: 1,
+      unit: "piece",
+      pack: 1,
+      price: 400000,
+      total: 403000,
+      status: "pending",
+      version: 2,
+      supply: orderDetail.items[0].supply,
+    },
+  ],
+  history: orderDetail.history,
+}
 export async function fixtures(context, role) {
   if (role)
     await context.addInitScript(
@@ -226,6 +343,41 @@ export async function fixtures(context, role) {
           },
           business: { registration: "RC 123456" },
         }
+      else if (p === "/getty/v1/order/fulfilment")
+        data = {
+          items: [
+            {
+              ...order,
+              status: "processing",
+              version: 3,
+              delivery: orderDetail.delivery,
+            },
+          ],
+          records: 1,
+          isNext: false,
+          isPrevious: false,
+          nextCursor: 0,
+          previousCursor: 0,
+        }
+      else if (p === `/getty/v1/order/fulfilment/${id}`) data = operationsDetail
+      else if (
+        p.startsWith("/getty/v1/order/code/") ||
+        p.startsWith("/getty/v1/order/vendor/code/")
+      )
+        data = orderDetail
+      else if (p === "/getty/v1/order" || p === "/getty/v1/order/vendor")
+        data = {
+          items: [order],
+          records: 1,
+          isNext: false,
+          isPrevious: false,
+          nextCursor: 0,
+          previousCursor: 0,
+        }
+      else if (p.match(/^\/getty\/v1\/order(?:\/vendor)?\/[^/]+$/))
+        data = p.includes("/vendor/")
+          ? { ...orderDetail, status: "processing" }
+          : orderDetail
       else if (p.endsWith("/carts"))
         data = {
           id: null,

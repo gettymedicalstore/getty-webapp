@@ -1,7 +1,7 @@
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
 import { Suspense } from "react"
 import { notFound, redirect } from "next/navigation"
-import OrdersPage from "@/features/orders/components/orders-page"
+import FulfilmentQueue from "@/features/orders/components/fulfilment-queue"
 import PaymentRecoveryPage from "@/features/orders/components/payment-recovery-page"
 import ManagementPage from "@/features/admin/components/management-page"
 import InventoryPage from "@/features/inventory/components/inventory-page"
@@ -18,7 +18,8 @@ export default async function AdminSection({
   params: Promise<{ section: string }>
 }) {
   const { section } = await params
-  if (section === "orders") return <OrdersPage workspace="admin" />
+  if (section === "orders") return <FulfilmentQueue view="orders" />
+  if (section === "fulfilment") return <FulfilmentQueue view="fulfilment" />
   if (section === "payments") return <PaymentRecoveryPage />
   if (section === "all-products") return <AllProductsPage />
   if (section === "featured") return <FeaturedPage />

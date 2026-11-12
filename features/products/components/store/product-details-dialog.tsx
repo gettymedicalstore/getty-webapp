@@ -167,14 +167,6 @@ export default function ProductDetailsDialog({
               <div className="mt-5 grid gap-4 text-sm text-[#535862] sm:grid-cols-2">
                 <div className="space-y-4">
                   <p>
-                    <span>SKU: </span>
-
-                    <strong className="font-semibold text-[#252B37]">
-                      {product.id.toUpperCase()}
-                    </strong>
-                  </p>
-
-                  <p>
                     <span>Category: </span>
 
                     <strong className="font-semibold text-[#252B37]">

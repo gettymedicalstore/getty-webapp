@@ -6,6 +6,7 @@ import {
   BadgePercent,
   Boxes,
   ClipboardList,
+  Truck,
   UserRound,
   UsersRound,
   Star,
@@ -67,6 +68,7 @@ export const workspaceMenus: Record<WorkspaceRole, WorkspaceItem[]> = {
     productGroup("/admin", true),
     { label: "Featured products", href: "/admin/featured", icon: Star },
     { label: "Orders", href: "/admin/orders", icon: ClipboardList },
+    { label: "Order fulfilment", href: "/admin/fulfilment", icon: Truck },
   ],
   customer: [
     { label: "Orders", href: "/customer/orders", icon: ClipboardList },
@@ -111,7 +113,10 @@ export function isWorkspaceLinkActive(item: WorkspaceLink, pathname: string) {
 export function workspacePageTitle(role: WorkspaceRole, pathname: string) {
   if (role === "admin" && pathname === "/admin/payments")
     return "Payment recovery"
-  if (/^\/(admin|supplier|customer)\/orders\/[^/]+$/.test(pathname))
+  if (
+    /^\/(admin|supplier|customer)\/orders\/[^/]+$/.test(pathname) ||
+    /^\/admin\/fulfilment\/[^/]+$/.test(pathname)
+  )
     return "Order details"
   return (
     workspaceMenus[role]

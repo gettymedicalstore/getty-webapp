@@ -46,6 +46,8 @@ export default function AdminDataTable<TData>({
   label = "Records",
   paginationControls,
 }: AdminDataTableProps<TData>) {
+  // TanStack Table returns mutable methods; React Compiler already excludes this hook.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
@@ -64,6 +66,11 @@ export default function AdminDataTable<TData>({
   return (
     <div className="overflow-hidden rounded-xl border border-[#e3e8e5] bg-white shadow-[0_2px_4px_rgba(25,45,32,.02)]">
       {toolbar}
+      {columns.length > 4 && (
+        <p className="border-t border-[#edf1ee] px-5 py-2 text-xs text-[#526457] sm:hidden">
+          Swipe across to see all columns.
+        </p>
+      )}
       <div
         className="overflow-x-auto overscroll-x-contain"
         role="region"

@@ -8,13 +8,17 @@ import { signupCountries } from "@/lib/signup-phone"
 
 export default function SignupPhoneField({
   disabled = false,
+  countryName = "country",
+  autoComplete = "tel-national",
 }: {
   disabled?: boolean
+  countryName?: string
+  autoComplete?: string
 }) {
   const phoneId = useId()
   const countryId = useId()
   const { field: countryField } = useController({
-    name: "country",
+    name: countryName,
     defaultValue: "NG",
   })
   const { field: phoneField, fieldState } = useController({
@@ -71,7 +75,7 @@ export default function SignupPhoneField({
           id={phoneId}
           {...phoneField}
           type="tel"
-          autoComplete="tel-national"
+          autoComplete={autoComplete}
           inputMode="tel"
           placeholder={
             countryCode === "NG" ? "080 1234 5678" : "National number"

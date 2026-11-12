@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { signupPhoneDetails } from "@/lib/signup-phone"
+import { nigeriaStates } from "../nigeria-states"
 
 const text = (name: string, max: number) =>
   z
@@ -26,12 +28,55 @@ export const deliverySchema = z.object({
     .optional()
     .transform((v) => v || null),
 })
-export const checkoutSchema = deliverySchema.extend({
-  notes: z
-    .string()
-    .trim()
-    .max(1000, "Use 1,000 characters or fewer.")
-    .optional(),
-})
+export const checkoutSchema = deliverySchema
+  .omit({ country: true })
+  .extend({
+    phoneCountry: z.string().length(2, "Choose a country calling code."),
+    notes: z
+      .string()
+      .trim()
+      .max(1000, "Use 1,000 characters or fewer.")
+      .optional(),
+  })
+  .superRefine((values, context) => {
+    if (
+      values.phoneCountry === "NG" &&
+      !nigeriaStates.some((state) => state === values.state)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["state"],
+        message: "Choose a state or the FCT.",
+      })
+    }
+    try {
+      signupPhoneDetails(values.phone, values.phoneCountry)
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message:
+          error instanceof Error
+            ? error.message
+            : "Enter a valid phone number.",
+      })
+    }
+  })
 export type Delivery = z.output<typeof deliverySchema>
 export type CheckoutFormSchema = z.output<typeof checkoutSchema>
+
+export function deliveryFromCheckoutForm(values: CheckoutFormSchema): Delivery {
+  const { phone, country } = signupPhoneDetails(
+    values.phone,
+    values.phoneCountry
+  )
+  return deliverySchema.parse({
+    name: values.name,
+    phone,
+    address: values.address,
+    city: values.city,
+    state: values.state,
+    country,
+    postcode: values.postcode,
+  })
+}

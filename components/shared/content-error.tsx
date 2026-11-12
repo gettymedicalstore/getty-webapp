@@ -16,6 +16,11 @@ export default function ContentError({
   retrying?: boolean
   className?: string
 }) {
+  // Schema and transport errors can contain raw JSON. Keep diagnostics out of
+  // the customer-facing panel while retaining the retry and support actions.
+  const message = /^\s*\[\s*\{/.test(description)
+    ? "Please try again in a moment. If the problem continues, our team can help."
+    : description
   return (
     <div
       role="alert"
@@ -31,7 +36,7 @@ export default function ContentError({
         {title}
       </h2>
       <p className="mt-2 max-w-sm text-[13px] leading-6 text-[#69756d]">
-        {description}
+        {message}
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
         {onRetry && (

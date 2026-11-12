@@ -30,6 +30,8 @@ const api = require("../features/checkout/api/checkout.ts")
 const recovery = require("../features/checkout/api/recovery.ts")
 const {
   deliverySchema,
+  checkoutSchema,
+  deliveryFromCheckoutForm,
 } = require("../features/checkout/schemas/checkout-schema.ts")
 const sample = JSON.parse(
   readFileSync(new URL("./fixtures/commerce.json", import.meta.url), "utf8")
@@ -65,16 +67,75 @@ test("delivery validation trims, validates lengths, and sends the preview body w
   const calls = []
   dataApi.apiData = async (path, options) => {
     calls.push({ path, ...options })
-    return sample.preview
+    return {
+      ...sample.preview,
+      delivery: {
+        ...sample.preview.delivery,
+        state: "FCT",
+        service: "standard",
+      },
+      deliveryQuote: {
+        service: "standard",
+        total: 3000,
+        estimatedMeasurements: true,
+        estimateOnly: true,
+        earliest: "2026-11-14",
+        latest: "2026-11-16",
+      },
+    }
   }
   try {
     const preview = await api.previewCheckout(sample.preview.delivery)
     assert.equal(preview.total, 10500)
+    assert.equal(preview.delivery.state, "FCT")
+    assert.equal(preview.deliveryQuote?.earliest, "2026-11-14")
     assert.equal(calls[0].path, "/getty/v1/order/checkout/preview")
     assert.deepEqual(JSON.parse(calls[0].body), sample.preview.delivery)
   } finally {
     dataApi.apiData = original
   }
+})
+test("checkout derives the delivery country from the phone country code", () => {
+  const form = {
+    ...sample.preview.delivery,
+    state: "FCT",
+  }
+  delete form.country
+  const nigeria = checkoutSchema.parse({
+    ...form,
+    phone: "0814 244 5807",
+    phoneCountry: "NG",
+  })
+  assert.deepEqual(
+    {
+      phone: deliveryFromCheckoutForm(nigeria).phone,
+      country: deliveryFromCheckoutForm(nigeria).country,
+    },
+    { phone: "+2348142445807", country: "NG" }
+  )
+  assert.equal(
+    checkoutSchema.safeParse({
+      ...form,
+      phone: "+44 7400 123456",
+      phoneCountry: "NG",
+    }).success,
+    false
+  )
+  assert.equal(
+    checkoutSchema.safeParse({
+      ...form,
+      state: "Not a Nigerian state",
+      phoneCountry: "NG",
+    }).success,
+    false
+  )
+  const uk = checkoutSchema.parse({
+    ...form,
+    phone: "+44 7400 123456",
+    phoneCountry: "GB",
+    state: "Greater London",
+  })
+  assert.equal(deliveryFromCheckoutForm(uk).country, "GB")
 })
 test("checkout and payment use documented IDs and bodies, and reject mismatched payment responses", async () => {
   const original = dataApi.apiData,
@@ -110,6 +171,16 @@ test("checkout and payment use documented IDs and bodies, and reject mismatched 
 test("only pending charges on unexpired pending orders can reopen a secure hosted link", () => {
   const now = Date.parse("2026-10-13T10:10:00+01:00")
   assert.ok(api.hostedPaymentLink(sample.checkout, sample.payment, now))
+  const testLink =
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/94672f4c16dbdc682e6a"
+  assert.equal(
+    api.hostedPaymentLink(
+      sample.checkout,
+      { ...sample.payment, link: testLink },
+      now
+    ),
+    testLink
+  )
   for (const status of [
     "created",
     "unknown",
@@ -149,11 +220,40 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
     "javascript:alert(1)",
     "http://example.com",
     "https://user:secret@example.com",
+    "https://checkout.flutterwave.com/v3/hosted/pay/live-example",
+    "https://payment.payaza.africa/pay/example",
+    "https://checkout.paystack.com/example",
+    "https://checkout.paystack.com/old-payment-link",
+    "https://checkout.flutterwave.com.evil.example/payment",
+    "https://checkout-v2.dev-flutterwave.com.evil.example/v3/hosted/pay/example",
+    "https://checkout-v2.dev-flutterwave.com/other-path",
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/",
+    "https://flutterwave.com/pay/example",
+    "https://checkout.flutterwave.com/other-path",
+    "https://checkout.flutterwave.com/v3/hosted/pay/example#redirect",
+    "https://checkout.flutterwave.com:8443/v3/hosted/pay/example",
   ])
     assert.equal(
       api.hostedPaymentLink(sample.checkout, { ...sample.payment, link }, now),
       null
     )
+  for (const provider of ["paystack", "payaza"])
+    assert.equal(
+      api.hostedPaymentLink(
+        sample.checkout,
+        { ...sample.payment, provider, link: testLink },
+        now
+      ),
+      null
+    )
+  assert.equal(
+    api.hostedPaymentLink(
+      sample.checkout,
+      { ...sample.payment, provider: undefined },
+      now
+    ),
+    null
+  )
   for (const status of ["created", "pending", "unknown", "succeeded"])
     assert.ok(
       api.blockingCharge({
@@ -163,16 +263,30 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
     )
 })
 test("checkout and payment recovery persist exact operations scoped to their account", () => {
-  const store = new Map()
+  const store = new Map(),
+    legacy = new Map()
   global.window = {
-    localStorage: {
+    sessionStorage: {
       getItem: (key) => store.get(key) ?? null,
       setItem: (key, value) => store.set(key, value),
+      removeItem: (key) => store.delete(key),
+    },
+    localStorage: {
+      getItem: (key) => legacy.get(key) ?? null,
+      setItem: (key, value) => legacy.set(key, value),
+      removeItem: (key) => legacy.delete(key),
     },
   }
   try {
     recovery.rememberCheckout(account, command)
     assert.deepEqual(recovery.readRecovery(account).command, command)
+    recovery.noteCheckoutIssue(account, "The response was interrupted.")
+    assert.equal(
+      recovery.readRecovery(account).issue,
+      "The response was interrupted."
+    )
+    recovery.rememberCheckout(account, command)
+    assert.equal(recovery.readRecovery(account).issue, undefined)
     assert.equal(recovery.readRecovery("another-buyer").command, undefined)
     assert.throws(
       () =>
@@ -200,13 +314,41 @@ test("checkout and payment recovery persist exact operations scoped to their acc
     )
     const next = recovery.paymentOperation(account, sample.checkout.id, true)
     assert.notEqual(next.token, first.token)
-    window.localStorage.setItem = () => {
+    recovery.clearRecovery(account)
+    assert.equal(recovery.readRecovery(account).order, undefined)
+    assert.equal(store.size, 0)
+    window.sessionStorage.setItem = () => {
       throw new Error("Storage disabled")
     }
     assert.throws(
       () => recovery.rememberCheckout("blocked", command),
       /Storage disabled/
     )
+  } finally {
+    delete global.window
+  }
+})
+test("old checkout recovery migrates into session storage", () => {
+  const store = new Map(),
+    legacy = new Map()
+  const key = `getty-checkout-v1:${account}`
+  legacy.set(key, JSON.stringify({ order: sample.checkout.id, payments: {} }))
+  global.window = {
+    sessionStorage: {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => store.set(key, value),
+      removeItem: (key) => store.delete(key),
+    },
+    localStorage: {
+      getItem: (key) => legacy.get(key) ?? null,
+      setItem: (key, value) => legacy.set(key, value),
+      removeItem: (key) => legacy.delete(key),
+    },
+  }
+  try {
+    assert.equal(recovery.readRecovery(account).order, sample.checkout.id)
+    assert.equal(legacy.has(key), false)
+    assert.equal(JSON.parse(store.get(key)).order, sample.checkout.id)
   } finally {
     delete global.window
   }

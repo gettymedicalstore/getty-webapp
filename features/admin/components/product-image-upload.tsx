@@ -359,15 +359,10 @@ export default function ProductImageUpload({
             <div className="grid size-14 place-items-center rounded-xl bg-[#edf6ef] text-[#39835a]">
               <Images aria-hidden className="size-7" />
             </div>
-            <h3 className="mt-4 font-semibold text-[#344d3d]">
-              Add product photos
-            </h3>
+            <h3 className="mt-4 font-semibold text-[#344d3d]">No photos yet</h3>
             <p className="mt-2 text-sm text-[#5e6f63]">
-              Add a single image or upload several images together.
+              Use the upload buttons above to add the first product image.
             </p>
-            <div className="mt-5">
-              <UploadButtons onSelect={showDialog} disabled={busy} />
-            </div>
           </div>
         ) : null}
       </div>

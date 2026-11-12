@@ -105,7 +105,7 @@ export default function CategoryCarousel() {
                   (max-width: 1024px) 45vw,
                   380px
                 "
-                  className="object-contain p-7 transition-transform duration-500 group-hover:scale-105"
+                  className="object-contain transition-transform duration-500 group-hover:scale-105"
                 />
               )}
             </div>
