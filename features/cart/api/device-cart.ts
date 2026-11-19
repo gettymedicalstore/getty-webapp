@@ -33,8 +33,9 @@ export function deviceMergeAttempt(
 }
 function saveDeviceState(items: CartItem[], merge: MergeAttempt | null) {
   try {
-    // Keep the receipt and accepted-line removal atomic in a single storage write.
-    window.localStorage.setItem(
+    // Keep guest items for this browser tab, including reloads, without making
+    // them a persistent bag after the session ends.
+    window.sessionStorage.setItem(
       DEVICE_CART_KEY,
       JSON.stringify({ items, merge })
     )
@@ -47,7 +48,14 @@ function saveDeviceState(items: CartItem[], merge: MergeAttempt | null) {
 
 export function deviceCartSnapshot() {
   try {
-    return window.localStorage.getItem(DEVICE_CART_KEY) ?? "[]"
+    const current = window.sessionStorage.getItem(DEVICE_CART_KEY)
+    if (current !== null) return current
+    // Preserve bags saved by earlier versions when a tab first opens.
+    const legacy = window.localStorage.getItem(DEVICE_CART_KEY)
+    if (legacy === null) return "[]"
+    window.sessionStorage.setItem(DEVICE_CART_KEY, legacy)
+    window.localStorage.removeItem(DEVICE_CART_KEY)
+    return legacy
   } catch {
     return "[]"
   }
@@ -55,7 +63,11 @@ export function deviceCartSnapshot() {
 
 export function subscribeDeviceCart(onChange: () => void) {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === DEVICE_CART_KEY || event.key === null) onChange()
+    if (
+      event.storageArea === window.sessionStorage &&
+      (event.key === DEVICE_CART_KEY || event.key === null)
+    )
+      onChange()
   }
   window.addEventListener("storage", onStorage)
   window.addEventListener(changeEvent, onChange)

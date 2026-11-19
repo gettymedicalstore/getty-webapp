@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  FormInput,
+  FormCheckbox,
   FormInputField,
   FormTextarea,
   ValidatedForm,
@@ -26,6 +26,7 @@ import {
   prepareOrderAction,
 } from "../api/action-recovery"
 import {
+  postOperationsActionWithPhotoRetry,
   postFulfilmentAction,
   postSupplyAction,
   type FulfilmentAction,
@@ -33,6 +34,7 @@ import {
   type SupplyAction,
 } from "../api/fulfilment"
 import type { ManagedOrder } from "../api/order-management"
+import { uploadParcelPhoto } from "../api/parcel-photo"
 
 export type WorkflowSelection = {
   action: FulfilmentAction | SupplyAction
@@ -78,11 +80,18 @@ export default function FulfilmentActionDialog({
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const [parcelPhoto, setParcelPhoto] = useState<File | null>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const [photoStage, setPhotoStage] = useState<
+    "uploading" | "verifying" | null
+  >(null)
   const [conflict, setConflict] = useState(false)
   const running = useRef(false)
   const action = selection.action
   const dispatch = action === "dispatch"
   const staffDelivery = action === "deliver" && audience === "operations"
+  const photoAllowed =
+    audience === "operations" && (action === "ready" || action === "dispatch")
   const referenceRequired = ["supply", "receive", "return-to-vendor"].includes(
     action
   )
@@ -123,7 +132,10 @@ export default function FulfilmentActionDialog({
       : z.string(),
     confirmed: confirmationRequired
       ? z.literal(true, {
-          error: "Confirm the physical check before continuing.",
+          error:
+            action === "ready"
+              ? "Confirm the status update before continuing."
+              : "Confirm the physical check before continuing.",
         })
       : z.boolean(),
   })
@@ -133,7 +145,24 @@ export default function FulfilmentActionDialog({
     running.current = true
     setBusy(true)
     setError("")
+    const photoStep: {
+      current: "requesting" | "uploading" | "verifying" | "attaching" | null
+    } = { current: null }
     try {
+      currentSession(expectedSession)
+      let parcelPhotoFileId: string | undefined
+      if (!pending && photoAllowed && parcelPhoto) {
+        photoStep.current = "requesting"
+        parcelPhotoFileId = await uploadParcelPhoto(
+          orderId,
+          parcelPhoto,
+          (stage) => {
+            photoStep.current = stage
+            setPhotoStage(stage)
+          }
+        )
+        photoStep.current = null
+      }
       currentSession(expectedSession)
       const payload = selection.itemId
         ? {
@@ -154,10 +183,13 @@ export default function FulfilmentActionDialog({
             ...(staffDelivery
               ? { recipient: values.recipient, proof: values.proof }
               : {}),
+            ...(parcelPhotoFileId ? { parcelPhotoFileId } : {}),
           }
       // A saved uncertain request always wins, including its original token and revision.
       const body = pending ?? prepareOrderAction(scope, payload)
       setPending(body)
+      if ("parcelPhotoFileId" in body && body.parcelPhotoFileId)
+        photoStep.current = "attaching"
       const result = selection.itemId
         ? audience === "vendor"
           ? await postSupplyAction(
@@ -173,9 +205,9 @@ export default function FulfilmentActionDialog({
               body as Parameters<typeof postFulfilmentAction>[0],
               "customer"
             )
-          : await postFulfilmentAction(
+          : await postOperationsActionWithPhotoRetry(
               body as Parameters<typeof postFulfilmentAction>[0],
-              "operations"
+              () => currentSession(expectedSession)
             )
       currentSession(expectedSession)
       clearOrderAction(scope)
@@ -201,15 +233,30 @@ export default function FulfilmentActionDialog({
         }
         if (cause instanceof GettyApiError && cause.status === 404)
           void onRefresh()
-        setError(
+        const message =
           cause instanceof Error
             ? cause.message
             : "The result is uncertain. Retry the saved request."
+        setError(
+          photoStep.current === "attaching" &&
+            cause instanceof GettyApiError &&
+            cause.status === 404 &&
+            /parcel photo/i.test(message)
+            ? `Getty could not attach the verified parcel photo to this order: ${message} Refresh the order, then try the photo again or remove it to continue without one.`
+            : photoStep.current === "attaching"
+              ? `Order update failed after photo verification: ${message}`
+              : photoStep.current === "verifying"
+                ? `Parcel photo verification failed: ${message}`
+                : photoStep.current === "uploading" ||
+                    photoStep.current === "requesting"
+                  ? `Parcel photo upload failed: ${message}`
+                  : message
         )
       }
     } finally {
       running.current = false
       setBusy(false)
+      setPhotoStage(null)
     }
   }
   return (
@@ -231,7 +278,7 @@ export default function FulfilmentActionDialog({
             : selection.itemName
               ? `${selection.itemName} · full item quantity. Record the physical custody change. Buying and delivery remain separate.`
               : action === "ready"
-                ? "Check that every non-cancelled item has physically arrived at Getty and packing is complete."
+                ? "Move the order to Ready for delivery after every active item has been received. A parcel photo is optional."
                 : "This changes the whole order delivery stage."}
         </DialogDescription>
         <ValidatedForm
@@ -280,6 +327,50 @@ export default function FulfilmentActionDialog({
                 />
               </>
             )}
+            {photoAllowed && (
+              <div className="space-y-2">
+                <label
+                  htmlFor="fulfilment-parcel-photo"
+                  className="block text-sm font-medium"
+                >
+                  Packed parcel photo (optional)
+                </label>
+                <input
+                  ref={photoInput}
+                  id="fulfilment-parcel-photo"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(event) =>
+                    setParcelPhoto(event.currentTarget.files?.[0] ?? null)
+                  }
+                  className="file:bg-primary file:text-primary-foreground w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-2"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Use a photo of the packed parcel without readable recipient
+                  labels.
+                </p>
+                {parcelPhoto && !busy && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setParcelPhoto(null)
+                      if (photoInput.current) photoInput.current.value = ""
+                    }}
+                  >
+                    Remove photo
+                  </Button>
+                )}
+                {photoStage && (
+                  <p role="status" className="text-primary text-sm">
+                    {photoStage === "uploading"
+                      ? "Uploading parcel photo…"
+                      : "Verifying parcel photo…"}
+                  </p>
+                )}
+              </div>
+            )}
             {referenceRequired && (
               <FormInputField
                 name="reference"
@@ -299,16 +390,22 @@ export default function FulfilmentActionDialog({
               </div>
             )}
             {confirmationRequired && (
-              <label className="flex items-start gap-3 text-sm leading-6">
-                <FormInput
-                  type="checkbox"
+              <label
+                htmlFor="fulfilment-action-confirmed"
+                className="flex cursor-pointer items-start gap-3 text-sm leading-6"
+              >
+                <FormCheckbox
+                  id="fulfilment-action-confirmed"
                   name="confirmed"
-                  className="mt-1 size-4"
+                  className="mt-0.5 size-5 rounded-md"
+                  disabled={busy || conflict || Boolean(pending)}
                 />
                 <span>
                   {audience === "customer"
                     ? "I received the entire remaining order."
-                    : "I have checked the physical goods and confirm this action."}
+                    : action === "ready"
+                      ? "I confirm this delivery status update."
+                      : "I have checked the physical goods and confirm this action."}
                 </span>
               </label>
             )}

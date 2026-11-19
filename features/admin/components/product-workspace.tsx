@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, Send, ShieldCheck } from "lucide-react"
+import { Send, ShieldCheck } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { DashboardSkeleton } from "@/components/shared/loading-skeletons"
 import ContentError from "@/components/shared/content-error"
@@ -52,20 +52,15 @@ export default function ProductWorkspace({
 }) {
   const params = useSearchParams()
   const pathname = usePathname()
-  const productListHref =
-    workspace === "admin" && pathname.startsWith("/admin/all-products/")
-      ? "/admin/all-products"
-      : `/${workspace}/products`
-  const productListLabel =
-    productListHref === "/admin/all-products" ? "all products" : "products"
   const session = useAuthSession()
   const [approvalOpen, setApprovalOpen] = useState(false)
   const [submissionOpen, setSubmissionOpen] = useState(false)
   const cancelApprovalButton = useRef<HTMLButtonElement>(null)
   const active = tabs.find((tab) => tab.id === params.get("tab")) ?? tabs[0]
+  const readScope = workspace === "admin" ? "admin" : "tenant"
   const query = useQuery({
-    queryKey: ["managed-product", productId],
-    queryFn: () => getManagedProduct(productId),
+    queryKey: ["managed-product", productId, readScope],
+    queryFn: () => getManagedProduct(productId, readScope),
   })
   const approval = useProductMutation(productId)
   const submission = useProductMutation(productId)
@@ -74,13 +69,6 @@ export default function ProductWorkspace({
   if (query.isError)
     return (
       <div className="space-y-5">
-        <Link
-          href={productListHref}
-          className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#426653]"
-        >
-          <ArrowLeft aria-hidden className="size-4" />
-          Back to {productListLabel}
-        </Link>
         <ContentError
           title="We couldn’t load this product"
           description={query.error.message || "Please try again in a moment."}
@@ -97,35 +85,28 @@ export default function ProductWorkspace({
   const currency = /^[A-Z]{3}$/.test(valueText(product.currency))
     ? String(product.currency)
     : "NGN"
-  const subtitle = valueText(product.brand)
   return (
     <div className="min-w-0 space-y-7">
-      <div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-          <h1 className="max-w-4xl text-2xl leading-tight font-semibold tracking-tight text-[#172f23] sm:text-3xl">
-            {product.name}
-          </h1>
-          <span
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium capitalize",
-              ["approved", "published", "active"].includes(status)
-                ? "bg-[#e5f4e9] text-[#226a42]"
-                : [
-                      "pending",
-                      "submitted",
-                      "pending_review",
-                      "in_review",
-                    ].includes(status)
-                  ? "bg-amber-50 text-amber-800"
-                  : status === "rejected"
-                    ? "bg-red-50 text-red-700"
-                    : "bg-[#e9edef] text-[#576570]"
-            )}
-          >
-            {product.status.replaceAll("_", " ")}
-          </span>
-        </div>
-        {subtitle && <p className="mt-3 text-sm text-[#5e6f63]">{subtitle}</p>}
+      <div className="flex min-h-10 items-center justify-end">
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize",
+            ["approved", "published", "active"].includes(status)
+              ? "bg-[#e5f4e9] text-[#226a42]"
+              : [
+                    "pending",
+                    "submitted",
+                    "pending_review",
+                    "in_review",
+                  ].includes(status)
+                ? "bg-amber-50 text-amber-800"
+                : status === "rejected"
+                  ? "bg-red-50 text-red-700"
+                  : "bg-[#e9edef] text-[#576570]"
+          )}
+        >
+          {product.status.replaceAll("_", " ")}
+        </span>
       </div>
       <nav
         aria-label="Product sections"
@@ -228,22 +209,30 @@ export default function ProductWorkspace({
             )}
           </div>
         )}
-        {active.id === "details" && <ProductDetailsForm product={productId} />}
+        {active.id === "details" && (
+          <ProductDetailsForm product={productId} readScope={readScope} />
+        )}
         {active.id === "variants" && (
-          <ProductVariants product={productId} currency={currency} />
+          <ProductVariants
+            product={productId}
+            currency={currency}
+            readScope={readScope}
+          />
         )}
         {active.id === "specifications" && (
           <ProductSpecifications
             product={productId}
             productName={product.name}
+            readScope={readScope}
           />
         )}
-        {active.id === "taxes" && <ProductTaxAssignments product={productId} />}
+        {active.id === "taxes" && (
+          <ProductTaxAssignments product={productId} readScope={readScope} />
+        )}
         {active.id === "photos" && (
           <ProductImageUpload
             product={productId}
             photosLink={data.links?.photos}
-            published={isApproved}
           />
         )}
       </div>

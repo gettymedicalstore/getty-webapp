@@ -45,11 +45,9 @@ type UploadMode = "single" | "multiple"
 export default function ProductImageUpload({
   product,
   photosLink,
-  published,
 }: {
   product: string
   photosLink?: string
-  published: boolean
 }) {
   const client = useQueryClient()
   const [mode, setMode] = useState<UploadMode>("single")
@@ -59,7 +57,6 @@ export default function ProductImageUpload({
       getProductPhotoPage(product, photosLink, pageParam),
     initialPageParam: null as PhotoPage["nextCursor"],
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    enabled: published,
   })
   const form = useForm<z.infer<typeof productImagesFormSchema>>({
     resolver: zodResolver(
@@ -291,7 +288,7 @@ export default function ProductImageUpload({
         <UploadButtons onSelect={showDialog} disabled={busy} />
       </div>
       <div className="rounded-xl border border-[#dfe8e1] bg-white p-5 sm:p-7">
-        {published && photos.isError && (
+        {photos.isError && (
           <div role="alert" className="mb-5 rounded-lg bg-red-50 p-4">
             <p className="text-sm text-red-800">
               We couldn’t load the product photos. Please try again.
@@ -307,7 +304,7 @@ export default function ProductImageUpload({
             </Button>
           </div>
         )}
-        {published && photos.isPending && !pendingPhotos.length ? (
+        {photos.isPending && !pendingPhotos.length ? (
           <div
             role="status"
             aria-label="Loading product photos"
@@ -354,7 +351,7 @@ export default function ProductImageUpload({
                 </div>
               )}
           </>
-        ) : !published || !photos.isError ? (
+        ) : !photos.isError ? (
           <div className="flex flex-col items-center py-9 text-center">
             <div className="grid size-14 place-items-center rounded-xl bg-[#edf6ef] text-[#39835a]">
               <Images aria-hidden className="size-7" />

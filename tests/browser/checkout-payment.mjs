@@ -19,6 +19,14 @@ async function setup(mode = "normal") {
     reducedMotion: "reduce",
   })
   await fixtures(context, "customer")
+  await context.route(
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/**",
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Flutterwave checkout</title>",
+      })
+  )
   let order = {
       ...sample.checkout,
       expires: new Date(Date.now() + 1800000).toISOString(),
@@ -118,7 +126,9 @@ async function fill(page) {
   await page.getByRole("textbox", { name: "City", exact: true }).fill("Abuja")
   await page.getByRole("combobox", { name: "State" }).selectOption("FCT")
   await page.getByRole("button", { name: "Review delivery & total" }).click()
-  await page.getByRole("button", { name: "Place order", exact: true }).waitFor()
+  await page
+    .getByRole("button", { name: "Proceed to payment", exact: true })
+    .waitFor()
 }
 async function responsive(page, label) {
   for (const width of widths) {
@@ -163,9 +173,13 @@ try {
     path: "/private/tmp/getty-checkout-390.png",
     fullPage: true,
   })
-  await page.getByRole("button", { name: "Place order", exact: true }).click()
-  await page.getByRole("button", { name: "Pay securely", exact: true }).click()
-  await page.getByRole("link", { name: "Pay now" }).waitFor()
+  await page
+    .getByRole("button", { name: "Proceed to payment", exact: true })
+    .click()
+  await responsive(page, "payment")
+  await page.waitForURL(
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/**"
+  )
   assert.equal(
     await page.getByRole("button", { name: "Check status" }).count(),
     0
@@ -174,7 +188,6 @@ try {
   assert.equal(calls.filter((c) => c.path.endsWith("/payments")).length, 1)
   assert.ok(calls.find((c) => c.path.endsWith("/checkout")).body.quote)
   assert.ok(calls.find((c) => c.path.endsWith("/payments")).body.token)
-  await responsive(page, "payment")
   run.setPayment({ ...sample.payment, status: "unknown", link: null })
   run.setOrder({ payments: [{ ...sample.payment, status: "unknown" }] })
   await page.goto(
@@ -185,11 +198,14 @@ try {
     .waitFor()
   assert.equal(
     await page
-      .getByRole("button", { name: /Pay securely|Try payment again/ })
+      .getByRole("button", { name: /Proceed to payment|Try payment again/ })
       .count(),
     0
   )
-  assert.equal(await page.getByRole("link", { name: "Pay now" }).count(), 0)
+  assert.equal(
+    await page.getByRole("link", { name: "Proceed to payment" }).count(),
+    0
+  )
   run.setPayment({ ...sample.payment, status: "succeeded" })
   run.setOrder({
     status: "expired",
@@ -218,7 +234,7 @@ try {
   await retry.page.goto(`${base}/checkout`)
   await fill(retry.page)
   await retry.page
-    .getByRole("button", { name: "Place order", exact: true })
+    .getByRole("button", { name: "Proceed to payment", exact: true })
     .click()
   await retry.page
     .getByRole("button", { name: "Check saved order request" })
@@ -227,9 +243,9 @@ try {
   await retry.page
     .getByRole("button", { name: "Check saved order request" })
     .click()
-  await retry.page
-    .getByRole("button", { name: "Pay securely", exact: true })
-    .waitFor()
+  await retry.page.waitForURL(
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/**"
+  )
   const attempts = retry.calls.filter((c) => c.path.endsWith("/checkout"))
   assert.equal(attempts.length, 2)
   assert.deepEqual(attempts[0].body, attempts[1].body)
@@ -239,20 +255,19 @@ try {
   await paymentRetry.page.goto(`${base}/checkout`)
   await fill(paymentRetry.page)
   await paymentRetry.page
-    .getByRole("button", { name: "Place order", exact: true })
+    .getByRole("button", { name: "Proceed to payment", exact: true })
     .click()
+  await paymentRetry.page.waitForURL("**/checkout/payment?order=**")
   await paymentRetry.page
-    .getByRole("button", { name: "Pay securely", exact: true })
-    .click()
-  await paymentRetry.page
-    .getByRole("alert")
-    .filter({ hasText: "Payment request could not be confirmed" })
+    .getByRole("button", { name: "Proceed to payment", exact: true })
     .waitFor()
   await paymentRetry.page.reload()
   await paymentRetry.page
-    .getByRole("button", { name: "Pay securely", exact: true })
+    .getByRole("button", { name: "Proceed to payment", exact: true })
     .click()
-  await paymentRetry.page.getByRole("link", { name: "Pay now" }).waitFor()
+  await paymentRetry.page.waitForURL(
+    "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/**"
+  )
   const paymentAttempts = paymentRetry.calls.filter(
     (c) => c.path.endsWith("/payments") && c.method === "POST"
   )

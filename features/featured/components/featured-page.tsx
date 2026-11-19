@@ -134,9 +134,11 @@ export default function FeaturedPage() {
         <div className="flex max-w-lg min-w-64 items-center gap-4">
           <div className="relative size-16 shrink-0 overflow-hidden rounded-lg border border-[#e3e9e5] bg-[#f5f8f6]">
             <FeaturedImage
-              key={`${entry.id}:${query.dataUpdatedAt}`}
+              key={entry.id}
               id={entry.id}
               name={entry.productName || entry.caption}
+              product={entry.product}
+              photo={entry.photo}
             />
           </div>
           <div className="min-w-0">
@@ -292,7 +294,7 @@ export default function FeaturedPage() {
               <p className="mt-2 text-sm">
                 {filters.search || filters.status
                   ? "Try another search or status."
-                  : "Add a product, upload its advert image and choose when it appears."}
+                  : "Add a product, choose its image and schedule when it appears."}
               </p>
             </div>
           }
@@ -347,8 +349,8 @@ export default function FeaturedPage() {
           </DialogTitle>
           <DialogDescription>
             {dialog?.kind === "delete"
-              ? "This removes the advert and its dedicated image. The product stays in the catalogue."
-              : "Choose a published product, advert image and schedule for the storefront."}
+              ? "This removes the featured entry. The product and its photos stay in the catalogue."
+              : "Choose a published product, image and schedule for the storefront."}
           </DialogDescription>
           {dialog?.kind === "delete" ? (
             <>

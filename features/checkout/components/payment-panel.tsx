@@ -27,9 +27,11 @@ import {
 export default function PaymentPanel({
   orderId,
   returnPage = false,
+  autoContinue = false,
 }: {
   orderId: string
   returnPage?: boolean
+  autoContinue?: boolean
 }) {
   const account = useAuthSession().data?.user?.id ?? ""
   return (
@@ -38,6 +40,7 @@ export default function PaymentPanel({
       account={account}
       orderId={orderId}
       returnPage={returnPage}
+      autoContinue={autoContinue}
     />
   )
 }
@@ -46,10 +49,12 @@ function PaymentStatus({
   account,
   orderId,
   returnPage,
+  autoContinue,
 }: {
   account: string
   orderId: string
   returnPage: boolean
+  autoContinue: boolean
 }) {
   const client = useQueryClient()
   const [selectedId, setSelectedId] = useState(
@@ -60,6 +65,8 @@ function PaymentStatus({
   const [clock, setClock] = useState(() => Date.now())
   const [pollStarted, setPollStarted] = useState(() => Date.now())
   const submitting = useRef(false)
+  const redirectRequested = useRef(autoContinue)
+  const redirecting = useRef(false)
   const orderQuery = useQuery({
     queryKey: ["purchase-payment", account, orderId],
     enabled: Boolean(account),
@@ -101,10 +108,26 @@ function PaymentStatus({
         queryKey: ["purchase-payment", account, orderId],
       })
   }, [client, account, orderId, paymentStatus])
+  const link =
+    order && !orderQuery.isFetching && !paymentQuery.isError
+      ? hostedPaymentLink(order, payment, clock)
+      : null
+  useEffect(() => {
+    if (
+      !returnPage &&
+      redirectRequested.current &&
+      link &&
+      !redirecting.current
+    ) {
+      redirecting.current = true
+      window.location.assign(link)
+    }
+  }, [link, returnPage])
 
   async function beginPayment() {
     if (submitting.current) return
     submitting.current = true
+    redirectRequested.current = true
     setBusy(true)
     setError("")
     const sessionId = readSession().sessionId
@@ -155,6 +178,7 @@ function PaymentStatus({
       )
       void orderQuery.refetch()
     } catch (e) {
+      redirectRequested.current = false
       setError(
         e instanceof GettyApiError && e.status === 503
           ? "Online payment is temporarily unavailable. Your order is saved; try again later or contact support."
@@ -190,10 +214,6 @@ function PaymentStatus({
     "completed",
   ].includes(order.status)
   const paid = payment?.kind === "charge" && payment.status === "succeeded"
-  const link =
-    !orderQuery.isFetching && !paymentQuery.isError
-      ? hostedPaymentLink(order, payment, clock)
-      : null
   const unsupportedPaymentLink =
     payment?.kind === "charge" &&
     payment.status === "pending" &&
@@ -272,7 +292,9 @@ function PaymentStatus({
             : payment?.status === "unknown"
               ? "Getty has not resolved this payment attempt yet. We can’t safely open checkout or start another charge until its status is confirmed. Refresh this page later, or contact support if this continues."
               : preparingPaymentLink
-                ? "Getty is preparing your secure payment link. Pay now will appear here when it is ready."
+                ? returnPage
+                  ? "Getty is preparing your secure payment link. Check this page again shortly."
+                  : "Preparing your secure payment link. The payment page will open when it is ready."
                 : paid
                   ? "Your payment has been verified. We’re waiting for the latest order status."
                   : payment?.failure || null}
@@ -312,18 +334,18 @@ function PaymentStatus({
           role="alert"
           className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
         >
-          This checkout link cannot be opened in Flutterwave test mode. Please
-          contact support before trying again.
+          This payment link could not be verified. Please contact support before
+          trying again.
         </p>
       )}
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         {link && (
           <a
             className="bg-primary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold text-white"
             href={link}
             referrerPolicy="no-referrer"
           >
-            Pay now
+            Proceed to payment
           </a>
         )}
         {canPay && (
@@ -335,7 +357,7 @@ function PaymentStatus({
               ? "Starting payment…"
               : payment
                 ? "Try payment again"
-                : "Pay securely"}
+                : "Proceed to payment"}
           </Button>
         )}
         <Link
@@ -343,12 +365,6 @@ function PaymentStatus({
           href={`/customer/orders/${order.id}`}
         >
           View order
-        </Link>
-        <Link
-          className="text-muted-foreground inline-flex min-h-11 items-center px-2 text-sm"
-          href="/contact"
-        >
-          Get help
         </Link>
       </div>
       {order.payments.some((p) => p.kind === "refund") && (

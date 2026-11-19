@@ -21,6 +21,9 @@ import {
 import Link from "next/link"
 
 import { trackOrder, type TrackOrderInput } from "../../api/track-order"
+import { fulfilmentHistoryAction } from "../../api/parcel-photo"
+import ParcelPhoto from "../parcel-photo"
+import RefundProgress from "../refund-progress"
 
 export default function TrackOrderPageContent({
   initialOrderNumber,
@@ -221,12 +224,13 @@ export default function TrackOrderPageContent({
                   <div>
                     <p className="text-sm font-bold capitalize">{stage}</p>
                     {order.history?.find(
-                      (event) => event.action === `fulfilment-${stage}`
+                      (event) => event.action === fulfilmentHistoryAction[stage]
                     )?.entry && (
                       <p className="text-muted-foreground mt-1 text-xs">
                         {new Date(
                           order.history.find(
-                            (event) => event.action === `fulfilment-${stage}`
+                            (event) =>
+                              event.action === fulfilmentHistoryAction[stage]
                           )!.entry
                         ).toLocaleString("en-NG", {
                           timeZone: "Africa/Lagos",
@@ -239,6 +243,11 @@ export default function TrackOrderPageContent({
                 </li>
               ))}
             </ol>
+            {session?.user?.role !== Role.SUPPLIER && (
+              <div className="mt-6 max-w-sm">
+                <ParcelPhoto orderId={order.id} photo={order.parcelPhoto} />
+              </div>
+            )}
             {order.tracking &&
               (order.tracking.carrier || order.tracking.reference) && (
                 <p className="mt-6 text-sm">
@@ -250,6 +259,17 @@ export default function TrackOrderPageContent({
                     : ""}
                 </p>
               )}
+            {session?.user?.role === Role.CUSTOMER && (
+              <RefundProgress
+                order={order}
+                onRefresh={async () => {
+                  if (trackingMutation.variables)
+                    await trackingMutation.mutateAsync(
+                      trackingMutation.variables
+                    )
+                }}
+              />
+            )}
             <Link
               href={`/${session?.user?.role === Role.SUPPLIER ? "supplier" : "customer"}/orders/${encodeURIComponent(order.id)}`}
               className="text-primary mt-6 inline-flex min-h-11 items-center gap-2 font-semibold"

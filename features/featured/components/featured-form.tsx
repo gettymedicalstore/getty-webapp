@@ -1,10 +1,17 @@
 "use client"
 import Image from "next/image"
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react"
 import { useFormContext, useWatch } from "react-hook-form"
-import { useQuery } from "@tanstack/react-query"
-import { ArrowUpRight, ImageIcon, UploadCloud } from "lucide-react"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
+import { ArrowUpRight, ImageIcon } from "lucide-react"
 import {
   ValidatedForm,
   FormInputField,
@@ -14,11 +21,13 @@ import {
 } from "@/components/shared/form/validated-form"
 import { Button } from "@/components/ui/button"
 import { DialogFooter } from "@/components/ui/dialog"
+import type { PhotoPage } from "@/lib/api/getty-contract"
 import {
   fieldClass,
   FormError,
 } from "@/features/admin/components/product-workspace-shared"
 import {
+  getProductPhotoPage,
   prepareProductImageUpload,
   uploadImageFile,
   type UploadTarget,
@@ -30,7 +39,11 @@ import {
   type FeaturedEntry,
   type FeaturedFormValues,
 } from "../schema"
-import { getFeaturedOptions } from "../api/featured"
+import { getFeaturedOptions, getNextFeaturedOrdinal } from "../api/featured"
+import {
+  copyProductPhotoForFeatured,
+  type CataloguePhotoSelection,
+} from "../api/product-photo-copy"
 import FeaturedImage from "./featured-image"
 
 export default function FeaturedForm({
@@ -50,6 +63,55 @@ export default function FeaturedForm({
   onCancel: () => void
   onUploadBusy: (busy: boolean) => void
 }) {
+  const [catalogueSelection, setCatalogueSelection] =
+    useState<CataloguePhotoSelection | null>(null)
+  const copiedPhoto = useRef<{
+    product: string
+    source: string
+    file: string
+  } | null>(null)
+  const [copying, setCopying] = useState(false)
+  const [copyError, setCopyError] = useState("")
+
+  async function submit(values: FeaturedFormValues) {
+    const selected = catalogueSelection
+    if (
+      !selected ||
+      selected.id !== values.photo ||
+      selected.product !== values.product
+    ) {
+      setCopyError("")
+      await onSave(values)
+      return
+    }
+    setCopying(true)
+    setCopyError("")
+    try {
+      let file =
+        copiedPhoto.current?.product === selected.product &&
+        copiedPhoto.current.source === selected.id
+          ? copiedPhoto.current.file
+          : ""
+      if (!file) {
+        file = await copyProductPhotoForFeatured(selected)
+        copiedPhoto.current = {
+          product: selected.product,
+          source: selected.id,
+          file,
+        }
+      }
+      await onSave({ ...values, photo: file })
+    } catch (cause) {
+      setCopyError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not prepare this product photo. Try again."
+      )
+    } finally {
+      setCopying(false)
+    }
+  }
+
   return (
     <ValidatedForm
       schema={featuredFormSchema}
@@ -60,18 +122,20 @@ export default function FeaturedForm({
         caption: entry?.caption ?? "",
         starts: lagosDateInput(entry?.starts ?? new Date().toISOString()),
         ends: lagosDateInput(entry?.ends ?? ""),
-        ordinal: String(entry?.ordinal ?? 0),
+        ordinal: entry ? String(entry.ordinal) : "",
       }}
-      onSubmit={onSave}
+      onSubmit={submit}
       className="space-y-5"
     >
       <Fields
         entry={entry}
         layout={layout}
-        busy={busy}
-        error={error}
+        busy={busy || copying}
+        copying={copying}
+        error={copyError || error}
         onCancel={onCancel}
         onUploadBusy={onUploadBusy}
+        setCatalogueSelection={setCatalogueSelection}
       />
     </ValidatedForm>
   )
@@ -80,18 +144,24 @@ function Fields({
   entry,
   layout = "dialog",
   busy,
+  copying,
   error,
   onCancel,
   onUploadBusy,
+  setCatalogueSelection,
 }: {
   entry?: FeaturedEntry
   layout?: "dialog" | "page"
   busy: boolean
+  copying: boolean
   error: string
   onCancel: () => void
   onUploadBusy: (busy: boolean) => void
+  setCatalogueSelection: Dispatch<
+    SetStateAction<CataloguePhotoSelection | null>
+  >
 }) {
-  const { setValue, formState } = useFormContext()
+  const { setValue, resetField, formState } = useFormContext()
   const tenant = useWatch({ name: "tenant" }) as string
   const photo = useWatch({ name: "photo" }) as string
   const caption = useWatch({ name: "caption" }) as string
@@ -105,6 +175,27 @@ function Fields({
     queryFn: () => getFeaturedOptions("products", tenant),
     enabled: Boolean(tenant),
   })
+  const productPhotos = useInfiniteQuery({
+    queryKey: ["featured", "product-photos", product],
+    queryFn: ({ pageParam }) =>
+      getProductPhotoPage(product, undefined, pageParam),
+    initialPageParam: null as PhotoPage["nextCursor"],
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled: Boolean(product),
+  })
+  const nextPosition = useQuery({
+    queryKey: ["featured", "next-position"],
+    queryFn: getNextFeaturedOrdinal,
+    enabled: !entry,
+  })
+  useEffect(() => {
+    if (!entry && nextPosition.data && !formState.dirtyFields.ordinal)
+      resetField("ordinal", { defaultValue: String(nextPosition.data.next) })
+  }, [entry, nextPosition.data, formState.dirtyFields.ordinal, resetField])
+  const availablePhotos = useMemo(
+    () => productPhotos.data?.pages.flatMap((page) => page.records) ?? [],
+    [productPhotos.data]
+  )
   const vendorOptions = vendors.data ?? []
   const productOptions = products.data ?? []
   const productName =
@@ -115,17 +206,41 @@ function Fields({
     (entry?.tenant === tenant ? entry.vendorName : "")
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState("")
-  const [target, setTarget] = useState<UploadTarget | null>(null)
   const [phase, setPhase] = useState<
-    "idle" | "preparing" | "ready" | "uploading" | "uploaded" | "failed"
+    "idle" | "preparing" | "uploading" | "uploaded" | "failed"
   >("idle")
   const [imageError, setImageError] = useState("")
   const generation = useRef(0)
   const choosing = useRef<HTMLInputElement>(null)
   const uploading = phase === "preparing" || phase === "uploading"
+  const selectedProductPhoto = availablePhotos.find((item) => item.id === photo)
+  const photoPreview = preview || selectedProductPhoto?.url || ""
+  const showEntryPhoto =
+    Boolean(entry) && photo === entry?.photo && product === entry?.product
+  const firstProductPhotoId = availablePhotos[0]?.id
   useEffect(() => {
-    onUploadBusy(uploading)
-  }, [uploading, onUploadBusy])
+    if (product && firstProductPhotoId && !photo && !file) {
+      setCatalogueSelection({
+        ...availablePhotos[0],
+        product,
+      })
+      setValue("photo", firstProductPhotoId, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
+  }, [
+    product,
+    firstProductPhotoId,
+    photo,
+    file,
+    setValue,
+    availablePhotos,
+    setCatalogueSelection,
+  ])
+  useEffect(() => {
+    onUploadBusy(uploading || copying)
+  }, [uploading, copying, onUploadBusy])
   useEffect(
     () => () => {
       generation.current++
@@ -140,17 +255,16 @@ function Fields({
   )
   async function prepare(selected: File) {
     const run = ++generation.current
+    setCatalogueSelection(null)
     setFile(selected)
     setPreview(URL.createObjectURL(selected))
-    setTarget(null)
     setImageError("")
     setPhase("preparing")
     setValue("photo", "", { shouldDirty: true })
     try {
       const next = await prepareProductImageUpload(selected)
       if (run === generation.current) {
-        setTarget(next)
-        setPhase("ready")
+        await upload(selected, next, run)
       }
     } catch (cause) {
       if (run === generation.current) {
@@ -161,13 +275,33 @@ function Fields({
       }
     }
   }
-  async function upload() {
-    if (!file || !target || uploading) return
-    const run = generation.current
+  function resetImage() {
+    generation.current++
+    setCatalogueSelection(null)
+    setFile(null)
+    setPreview("")
+    setPhase("idle")
+    setImageError("")
+    setValue("photo", "", { shouldDirty: true, shouldValidate: true })
+  }
+  function chooseProductPhoto(item: (typeof availablePhotos)[number]) {
+    generation.current++
+    setCatalogueSelection({ ...item, product })
+    setFile(null)
+    setPreview("")
+    setPhase("idle")
+    setImageError("")
+    setValue("photo", item.id, { shouldDirty: true, shouldValidate: true })
+  }
+  async function upload(
+    selected: File,
+    uploadTarget: UploadTarget,
+    run: number
+  ) {
     setPhase("uploading")
     setImageError("")
     try {
-      const id = await uploadImageFile(file, target)
+      const id = await uploadImageFile(selected, uploadTarget)
       if (run === generation.current) {
         setValue("photo", id, { shouldDirty: true, shouldValidate: true })
         setPhase("uploaded")
@@ -211,7 +345,10 @@ function Fields({
               required
               className={fieldClass}
               disabled={busy || uploading || vendors.isPending}
-              onChange={() => setValue("product", "", { shouldDirty: true })}
+              onChange={() => {
+                setValue("product", "", { shouldDirty: true })
+                resetImage()
+              }}
             >
               <option value="">
                 {vendors.isPending ? "Loading vendors…" : "Choose a vendor"}
@@ -251,6 +388,7 @@ function Fields({
               required
               className={fieldClass}
               disabled={busy || uploading || !tenant || products.isPending}
+              onChange={resetImage}
             >
               <option value="">
                 {!tenant
@@ -295,24 +433,95 @@ function Fields({
           <div>
             <p className="text-sm font-semibold">Featured photo</p>
             <p className="mt-1 text-xs leading-5 text-[#5e6f63]">
-              Use a dedicated JPG, PNG or WebP image for this featured product.
+              Use a photo from the selected product, or upload a different
+              image.
             </p>
           </div>
-          {layout === "dialog" && (preview || entry) && (
+          {product && productPhotos.isPending && (
+            <p role="status" className="text-xs text-[#5e6f63]">
+              Loading product photos…
+            </p>
+          )}
+          {product && productPhotos.isError && (
+            <div className="flex flex-wrap items-center gap-3">
+              <FormError message="Could not load this product’s photos." />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || uploading}
+                onClick={() => void productPhotos.refetch()}
+              >
+                Retry photos
+              </Button>
+            </div>
+          )}
+          {product &&
+            productPhotos.data &&
+            (availablePhotos.length ? (
+              <>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {availablePhotos.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-label={`Use product photo ${index + 1}: ${item.name}`}
+                      aria-pressed={photo === item.id}
+                      disabled={busy || uploading}
+                      onClick={() => chooseProductPhoto(item)}
+                      className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-white outline-none focus-visible:ring-2 focus-visible:ring-[#087b4c] ${
+                        photo === item.id
+                          ? "border-[#087b4c]"
+                          : "border-[#dfe7e1] hover:border-[#86b99b]"
+                      }`}
+                    >
+                      <Image
+                        src={item.url}
+                        alt={item.name}
+                        fill
+                        unoptimized
+                        sizes="(min-width: 640px) 128px, 30vw"
+                        className="object-contain p-2"
+                      />
+                    </button>
+                  ))}
+                </div>
+                {productPhotos.hasNextPage && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      busy || uploading || productPhotos.isFetchingNextPage
+                    }
+                    onClick={() => void productPhotos.fetchNextPage()}
+                  >
+                    {productPhotos.isFetchingNextPage
+                      ? "Loading more photos…"
+                      : "Show more photos"}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-[#5e6f63]">
+                This product has no photos yet. Upload an image to feature it.
+              </p>
+            ))}
+          {layout === "dialog" && (photoPreview || showEntryPhoto) && (
             <div className="relative h-40 overflow-hidden rounded-lg border bg-white">
-              {preview ? (
+              {photoPreview ? (
                 <Image
-                  src={preview}
+                  src={photoPreview}
                   alt="Selected advert image"
                   fill
                   unoptimized
                   sizes="560px"
                   className="object-contain"
                 />
-              ) : entry ? (
+              ) : entry && showEntryPhoto ? (
                 <FeaturedImage
                   id={entry.id}
                   name={entry.productName || entry.caption}
+                  product={entry.product}
+                  photo={entry.photo}
                 />
               ) : null}
             </div>
@@ -344,26 +553,17 @@ function Fields({
               disabled={busy || uploading}
               onClick={() => choosing.current?.click()}
             >
-              {entry || file ? "Change image" : "Choose image"}
+              {entry || file || photo
+                ? "Upload a different image"
+                : "Upload image"}
             </Button>
-            {file && phase !== "uploaded" && (
-              <Button
-                type="button"
-                disabled={busy || uploading || !target}
-                onClick={() => void upload()}
-              >
-                <UploadCloud aria-hidden className="size-4" />
-                {phase === "uploading" ? "Uploading…" : "Upload image"}
-              </Button>
-            )}
             {file && phase === "failed" && (
               <Button
                 type="button"
-                variant="outline"
                 disabled={busy}
                 onClick={() => void prepare(file)}
               >
-                Prepare again
+                Retry image upload
               </Button>
             )}
           </div>
@@ -376,13 +576,11 @@ function Fields({
             <p role="status" className="text-xs text-[#506858]">
               {phase === "preparing"
                 ? "Preparing image…"
-                : phase === "ready"
-                  ? "Ready. Upload the image before saving."
-                  : phase === "uploaded"
-                    ? "Image uploaded. Save the featured product to finish."
-                    : phase === "uploading"
-                      ? "Uploading image…"
-                      : "Image upload needs attention."}
+                : phase === "uploaded"
+                  ? "Image uploaded. Save the featured product to finish."
+                  : phase === "uploading"
+                    ? "Uploading image…"
+                    : "Image upload needs attention."}
             </p>
           )}
           <FieldError
@@ -430,9 +628,20 @@ function Fields({
           label="Display order"
           type="number"
           inputMode="numeric"
+          min={0}
           required
           disabled={busy}
-          hint="Lower numbers appear first, starting at 0."
+          hint={
+            entry
+              ? "Lower numbers appear first. Change this to reorder the product."
+              : nextPosition.isPending
+                ? "Finding the next position…"
+                : nextPosition.isError
+                  ? "Could not suggest a position. Enter a number starting at 0."
+                  : nextPosition.data.occupied.length
+                    ? `Next position: ${nextPosition.data.next}, after position ${nextPosition.data.occupied.at(-1)}. Lower numbers appear first.`
+                    : "Position 0 is first. New featured products will follow it."
+          }
         />
         <FormError message={error} />
         <DialogFooter>
@@ -453,11 +662,13 @@ function Fields({
               !photo
             }
           >
-            {busy
-              ? "Saving…"
-              : entry
-                ? "Save changes"
-                : "Create featured product"}
+            {copying
+              ? "Preparing photo…"
+              : busy
+                ? "Saving…"
+                : entry
+                  ? "Save changes"
+                  : "Create featured product"}
           </Button>
         </DialogFooter>
       </div>
@@ -471,19 +682,21 @@ function Fields({
           </h2>
           <div className="overflow-hidden rounded-xl border border-[#dfe7e1] bg-white">
             <div className="relative flex aspect-[4/3] items-center justify-center bg-[#edf5f0]">
-              {preview ? (
+              {photoPreview ? (
                 <Image
-                  src={preview}
+                  src={photoPreview}
                   alt={productName || "Selected advert image"}
                   fill
                   unoptimized
                   sizes="(min-width: 1280px) 440px, 100vw"
                   className="object-contain p-5"
                 />
-              ) : entry ? (
+              ) : entry && showEntryPhoto ? (
                 <FeaturedImage
                   id={entry.id}
                   name={entry.productName || entry.caption}
+                  product={entry.product}
+                  photo={entry.photo}
                 />
               ) : (
                 <div className="space-y-3 text-center text-[#347451]">

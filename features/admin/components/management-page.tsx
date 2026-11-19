@@ -5,6 +5,7 @@ import {
   FormSelect,
   FormTextarea,
 } from "@/components/shared/form/validated-form"
+import PriceInput from "@/components/shared/form/price-input"
 import {
   productFormSchema,
   categoryFormSchema,
@@ -36,6 +37,7 @@ import { portalRecords, changePortalRecord } from "../api/portal"
 import CreateAccount from "./create-account"
 import OrderDashboardSummary from "@/features/orders/components/order-dashboard-summary"
 import RecordRowActions from "./record-row-actions"
+
 const screens: Record<
   string,
   {
@@ -542,10 +544,10 @@ export default function ManagementPage({
               />
             )}
             {section !== "taxes" && (
-              <>
+              <div className="space-y-2">
                 <label
                   htmlFor="record-description"
-                  className="block text-sm font-medium"
+                  className="block text-sm font-medium text-[#414651]"
                 >
                   Description
                 </label>
@@ -554,10 +556,11 @@ export default function ManagementPage({
                   name="description"
                   required
                   minLength={2}
+                  rows={4}
                   defaultValue={String(editing?.description ?? "")}
-                  className="form-input min-h-24"
+                  className="focus-visible:border-primary focus-visible:ring-primary/10 block min-h-32 w-full resize-y rounded-lg border border-[#dce2de] bg-white p-3.5 text-base leading-6 text-[#414651] shadow-none transition-[border-color,box-shadow] outline-none placeholder:text-[#8b938e] hover:border-[#bac7be] focus-visible:ring-3 disabled:opacity-50 aria-invalid:border-red-500 aria-invalid:focus-visible:ring-red-500/20 sm:text-sm"
                 />
-              </>
+              </div>
             )}
             {section === "taxes" && (
               <FormInputField
@@ -606,14 +609,7 @@ export default function ManagementPage({
             )}
             {section === "products" && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormInputField
-                  id="record-price"
-                  name="price"
-                  label="Price (NGN)"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
+                <PriceInput
                   defaultValue={Number(editing?.price ?? "") || undefined}
                 />
                 <FormInputField

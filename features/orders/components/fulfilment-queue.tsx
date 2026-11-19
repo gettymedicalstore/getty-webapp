@@ -80,10 +80,7 @@ export default function FulfilmentQueue({
     <div className="min-w-0 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-[#243b2e]">
-            {view === "orders" ? "Orders" : "Order fulfilment"}
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="text-muted-foreground text-sm">
             {view === "orders"
               ? "Review all orders and their current status."
               : "Coordinate supplier handover, Getty packing and delivery."}

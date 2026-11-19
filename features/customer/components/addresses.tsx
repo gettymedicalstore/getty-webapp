@@ -6,11 +6,21 @@ import {
 import { addressFormSchema } from "@/lib/form-schemas"
 import type { z } from "zod"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import parsePhoneNumber from "libphonenumber-js/min"
 import { MapPin, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
-import { useDeviceStore } from "@/lib/use-device-store"
+import {
+  createAddress,
+  deleteAddress,
+  findCreatedAddress,
+  getSavedAddresses,
+  updateAddress,
+  type AddressInput,
+} from "@/features/checkout/api/addresses"
+import { deliverySchema } from "@/features/checkout/schemas/checkout-schema"
 import PageHeading from "@/components/shared/page-heading"
 import EmptyState from "@/components/shared/empty-state"
 import AddressCard from "@/components/customer/addresses/address-card"
@@ -32,60 +42,119 @@ type Address = {
   city: string
   state: string
   country: string
-  isDefault?: boolean
+  isDefault: boolean
 }
-const empty: Address[] = []
 export default function Addresses() {
+  const pendingCreation = useRef<{
+    input: AddressInput
+    previousIds: string[]
+  } | null>(null)
   const { data: session } = useAuthSession()
-  const [saved, setSaved] = useDeviceStore<Address[]>(
-    `getty-addresses:${session?.user?.id ?? "guest"}`,
-    empty
-  )
-  const addresses = Array.isArray(saved)
-    ? saved.filter(
-        (a) =>
-          a &&
-          typeof a.id === "string" &&
-          typeof a.label === "string" &&
-          typeof a.recipient === "string" &&
-          typeof a.line1 === "string" &&
-          typeof a.phone === "string" &&
-          typeof a.city === "string" &&
-          typeof a.state === "string"
-      )
-    : empty
+  const queryClient = useQueryClient()
+  const queryKey = ["saved-addresses", session?.user?.id]
+  const saved = useQuery({
+    queryKey,
+    queryFn: getSavedAddresses,
+    enabled: Boolean(session?.user),
+  })
+  const addresses: Address[] =
+    saved.data?.map((entry) => ({
+      id: entry.id,
+      isDefault: entry.isDefault,
+      label: entry.label,
+      recipient: entry.delivery.name,
+      phone: entry.delivery.phone,
+      line1: entry.delivery.address,
+      city: entry.delivery.city,
+      state: entry.delivery.state,
+      country:
+        entry.delivery.country === "NG" ? "Nigeria" : entry.delivery.country,
+    })) ?? []
   const [editing, setEditing] = useState<Address | null>(null),
     [open, setOpen] = useState(false),
-    [remove, setRemove] = useState<string | null>(null)
-  function submit(values: z.output<typeof addressFormSchema>) {
+    [remove, setRemove] = useState<string | null>(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("")
+  async function submit(values: z.output<typeof addressFormSchema>) {
     if (!session?.user) return
-    const address = {
-      id: editing?.id ?? crypto.randomUUID(),
-      label: values.label,
-      recipient: values.recipient,
-      phone: values.phone,
-      line1: values.line1,
-      city: values.city,
-      state: values.state,
-      country: "Nigeria",
-      isDefault: editing?.isDefault ?? addresses.length === 0,
-    }
-    if (
-      !setSaved(
-        editing
-          ? addresses.map((a) => (a.id === address.id ? address : a))
-          : [...addresses, address]
+    setBusy(true)
+    setError("")
+    try {
+      const country = parsePhoneNumber(values.phone, "NG")?.country ?? "NG"
+      const current = saved.data?.find((entry) => entry.id === editing?.id)
+      const input = {
+        label: values.label,
+        delivery: deliverySchema.parse({
+          name: values.recipient,
+          phone: values.phone,
+          address: values.line1,
+          city: values.city,
+          state: values.state,
+          country,
+          service: current?.delivery.service,
+          postcode: current?.delivery.postcode ?? null,
+        }),
+      }
+      if (editing) await updateAddress(editing.id, input)
+      else {
+        const createInput: AddressInput = {
+          ...input,
+          ...(saved.isSuccess && saved.data.length === 0
+            ? { isDefault: true }
+            : {}),
+        }
+        let alreadySaved = false
+        if (pendingCreation.current) {
+          const refreshed = await saved.refetch()
+          if (!refreshed.data) {
+            setError(
+              "Could not check whether the address was saved. Try again when your address book loads."
+            )
+            return
+          }
+          createInput.isDefault = refreshed.data.length === 0 ? true : undefined
+          const pending = pendingCreation.current
+          const recovered = findCreatedAddress(
+            refreshed.data,
+            pending.previousIds,
+            pending.input
+          )
+          pendingCreation.current = null
+          alreadySaved = Boolean(
+            recovered &&
+            pending.input.label === createInput.label &&
+            JSON.stringify(pending.input.delivery) ===
+              JSON.stringify(createInput.delivery)
+          )
+        }
+        if (!alreadySaved) {
+          try {
+            await createAddress(createInput)
+          } catch (cause) {
+            pendingCreation.current = {
+              input: createInput,
+              previousIds: saved.data?.map((entry) => entry.id) ?? [],
+            }
+            throw cause
+          }
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey })
+      setOpen(false)
+      toast.success("Address saved.")
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not save address."
       )
-    )
-      return
-    setOpen(false)
-    toast.success("Address saved.")
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <div className="space-y-7">
       <PageHeading
         title="Delivery addresses"
-        description="Save delivery addresses on this device for future orders."
+        description="Manage delivery addresses for future orders and choose your default."
         action={
           <Button
             className="h-11"
@@ -100,22 +169,45 @@ export default function Addresses() {
           </Button>
         }
       />
-      {addresses.length ? (
+      {saved.isPending ? (
+        <p className="text-muted-foreground text-sm">Loading addresses…</p>
+      ) : saved.isError ? (
+        <p role="alert" className="text-destructive text-sm">
+          Could not load addresses.{" "}
+          <button className="underline" onClick={() => void saved.refetch()}>
+            Try again
+          </button>
+        </p>
+      ) : addresses.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {addresses.map((a) => (
             <AddressCard
               key={a.id}
               address={a}
+              onSetDefault={(id) => {
+                const entry = saved.data?.find((item) => item.id === id)
+                if (!entry || busy) return
+                setBusy(true)
+                void updateAddress(id, {
+                  label: entry.label,
+                  delivery: entry.delivery,
+                  isDefault: true,
+                })
+                  .then(() => queryClient.invalidateQueries({ queryKey }))
+                  .catch((cause) =>
+                    toast.error(
+                      cause instanceof Error
+                        ? cause.message
+                        : "Could not set the default address."
+                    )
+                  )
+                  .finally(() => setBusy(false))
+              }}
               onEdit={(id) => {
                 setEditing(addresses.find((a) => a.id === id) ?? null)
                 setOpen(true)
               }}
               onDelete={setRemove}
-              onSetDefault={(id) =>
-                setSaved(
-                  addresses.map((a) => ({ ...a, isDefault: a.id === id }))
-                )
-              }
             />
           ))}
         </div>
@@ -137,6 +229,7 @@ export default function Addresses() {
             </DialogDescription>
           </DialogHeader>
           <ValidatedForm
+            key={editing?.id ?? "new"}
             schema={addressFormSchema}
             onSubmit={submit}
             className="flex min-h-0 flex-col overflow-hidden"
@@ -206,8 +299,15 @@ export default function Addresses() {
               >
                 Cancel
               </Button>
-              <Button type="submit">Save address</Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save address"}
+              </Button>
             </DialogFooter>
+            {error && (
+              <p role="alert" className="text-destructive px-5 pb-4 text-sm">
+                {error}
+              </p>
+            )}
           </ValidatedForm>
         </DialogContent>
       </Dialog>
@@ -230,12 +330,23 @@ export default function Addresses() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                const remaining = addresses.filter((a) => a.id !== remove)
-                if (!remaining.some((a) => a.isDefault) && remaining[0])
-                  remaining[0] = { ...remaining[0], isDefault: true }
-                setSaved(remaining)
-                setRemove(null)
+              disabled={busy}
+              onClick={async () => {
+                if (!remove) return
+                setBusy(true)
+                try {
+                  await deleteAddress(remove)
+                  await queryClient.invalidateQueries({ queryKey })
+                  setRemove(null)
+                } catch (cause) {
+                  toast.error(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Could not delete address."
+                  )
+                } finally {
+                  setBusy(false)
+                }
               }}
             >
               Delete address

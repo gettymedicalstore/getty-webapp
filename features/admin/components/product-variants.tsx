@@ -20,6 +20,7 @@ import {
   saveProductResource,
   deleteProductResource,
   type ProductRecord,
+  type ProductReadScope,
 } from "../api/product-management"
 import {
   DeleteProductItem,
@@ -35,13 +36,15 @@ import {
 export default function ProductVariants({
   product,
   currency,
+  readScope = "tenant",
 }: {
   product: string
   currency: string
+  readScope?: ProductReadScope
 }) {
   const query = useQuery({
-    queryKey: ["managed-product", product, "variants"],
-    queryFn: () => getProductResource(product, "variants"),
+    queryKey: ["managed-product", product, readScope, "variants"],
+    queryFn: () => getProductResource(product, "variants", readScope),
   })
   const mutation = useProductMutation(product)
   const [editor, setEditor] = useState<{ record: ProductRecord | null } | null>(

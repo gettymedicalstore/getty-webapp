@@ -26,6 +26,7 @@ require.extensions[".ts"] = (module, filename) =>
     filename
   )
 const api = require("../features/orders/api/order-management.ts")
+const refundProgress = require("../features/orders/api/refund-progress.ts")
 const data = require("../lib/api/data.ts")
 const recovery = require("../features/orders/api/action-recovery.ts")
 const orderId = "11111111-1111-4111-8111-000000000005"
@@ -86,6 +87,63 @@ const page = {
   nextCursor: 42,
   previousCursor: 0,
 }
+
+test("multiple refund attempts remain in progress until the paid amount settles", () => {
+  const charge = {
+    id: token,
+    kind: "charge",
+    status: "succeeded",
+    amount: 405000,
+    currency: "NGN",
+  }
+  const first = {
+    ...charge,
+    id: lineId,
+    kind: "refund",
+    status: "succeeded",
+    amount: 200000,
+  }
+  const second = {
+    ...first,
+    id: orderId,
+    status: "pending",
+    amount: 205000,
+  }
+  assert.equal(
+    refundProgress.summarizeRefundProgress("cancelled", [
+      charge,
+      first,
+      second,
+    ]),
+    "Refund processing"
+  )
+  assert.equal(
+    refundProgress.summarizeRefundProgress("cancelled", [
+      charge,
+      first,
+      { ...second, status: "succeeded" },
+    ]),
+    "Full refund completed"
+  )
+  assert.equal(
+    refundProgress.summarizeRefundProgress("cancelled", [charge, first]),
+    "Refund processing"
+  )
+  assert.equal(
+    refundProgress.summarizeRefundProgress("cancelled", [
+      charge,
+      first,
+      { ...second, status: "failed" },
+    ]),
+    "Refund needs attention"
+  )
+  assert.equal(
+    refundProgress.summarizeRefundProgress("cancelled", [
+      { ...charge, status: "unknown" },
+    ]),
+    "Payment confirmation pending"
+  )
+})
 
 test("order details preserve the delivery estimate and service returned after checkout", () => {
   const parsed = api.orderDetailSchema.parse({
@@ -342,6 +400,49 @@ test("legacy shipping is rejected and cancellation and return actions validate r
   )
   assert.throws(() =>
     api.actionSchema.parse({ token, version: 0, action: "accept" })
+  )
+})
+test("customers can request whole-order cancellation until Getty dispatches", () => {
+  const preparing = {
+    ...detail,
+    status: "processing",
+    fulfilment: "preparing",
+    version: 4,
+    items: [{ ...line, status: "accepted" }],
+  }
+  assert.equal(api.canCustomerCancelOrder(preparing), true)
+  assert.equal(
+    api.canCustomerCancelOrder({ ...preparing, fulfilment: "ready" }),
+    true
+  )
+  assert.equal(
+    api.canCustomerCancelOrder({ ...preparing, fulfilment: "dispatched" }),
+    false
+  )
+  assert.equal(
+    api.canCustomerCancelOrder({ ...preparing, status: "shipped" }),
+    false
+  )
+  assert.equal(
+    api.canCustomerCancelOrder({
+      ...preparing,
+      items: [
+        {
+          ...line,
+          status: "accepted",
+          supply: { status: "received", reference: "R-1", updated: null },
+        },
+      ],
+    }),
+    true
+  )
+  assert.equal(
+    api.canCustomerCancelOrder({
+      ...preparing,
+      fulfilment: undefined,
+      items: [{ ...line, status: "shipped" }],
+    }),
+    false
   )
 })
 test("available actions honour seller versus buyer, payment state, line state and return window", () => {

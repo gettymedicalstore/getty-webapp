@@ -157,6 +157,13 @@ export const orderDeliveryQuoteSchema = z.object({
   estimatedMeasurements: z.boolean().optional(),
 })
 export const orderDetailSchema = orderSummarySchema.extend({
+  parcelPhoto: z
+    .object({
+      fileId: z.string().min(1),
+      stage: z.string(),
+      accessPath: z.string().min(1),
+    })
+    .nullish(),
   version: z.number().int().positive().optional(),
   modified: z.string().nullish(),
   expires: z.string().nullish(),
@@ -340,6 +347,27 @@ export async function cancelOrder(
       body: JSON.stringify(parsed),
     })
   )
+}
+
+export function canCustomerCancelOrder(order: ManagedOrder): boolean {
+  if (
+    !order.version ||
+    !["pending", "confirmed", "processing"].includes(order.status)
+  )
+    return false
+  if (
+    order.fulfilment &&
+    !["placed", "preparing", "ready"].includes(order.fulfilment)
+  )
+    return false
+  if (
+    !order.fulfilment &&
+    order.items.some((line) =>
+      ["shipped", "delivered", "returned"].includes(line.status)
+    )
+  )
+    return false
+  return order.items.some((line) => line.status !== "cancelled")
 }
 export function availableLineActions(
   audience: OrderAudience,

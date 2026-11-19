@@ -113,7 +113,7 @@ export const featuredFormSchema = z
   .object({
     tenant: z.string().min(1, "Choose a vendor."),
     product: z.string().min(1, "Choose a published product."),
-    photo: z.string().min(1, "Upload an advert image."),
+    photo: z.string().min(1, "Choose or upload a featured image."),
     caption: z.string().trim().min(1, "Enter a caption."),
     starts: localDate,
     ends: localDate,

@@ -173,15 +173,25 @@ export function hostedPaymentLink(
     return null
   try {
     const url = new URL(payment.link)
+    const allowedHosts: Record<string, string[]> = {
+      flutterwave: [
+        "checkout.flutterwave.com",
+        "checkout-v2.dev-flutterwave.com",
+      ],
+      payaza: ["payment.payaza.africa"],
+      paystack: ["checkout.paystack.com"],
+    }
     if (
-      payment.provider !== "flutterwave" ||
       url.protocol !== "https:" ||
-      url.hostname !== "checkout-v2.dev-flutterwave.com" ||
+      !payment.provider ||
+      !allowedHosts[payment.provider]?.includes(url.hostname) ||
       url.username ||
       url.password ||
       url.hash ||
       (url.port && url.port !== "443") ||
-      !/^\/v3\/hosted\/pay\/[^/]+$/.test(url.pathname)
+      url.pathname === "/" ||
+      (payment.provider === "flutterwave" &&
+        !/^\/v3\/hosted\/pay\/[^/]+$/.test(url.pathname))
     )
       return null
     return url.href

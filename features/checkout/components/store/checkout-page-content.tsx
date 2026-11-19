@@ -1,9 +1,9 @@
 "use client"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, Truck } from "lucide-react"
 import AuthBoundary from "@/features/auth/components/auth-boundary"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
@@ -28,9 +28,13 @@ import {
   type CheckoutFormSchema,
 } from "../../schemas/checkout-schema"
 import {
+  awaitingPayment,
+  blockingCharge,
+  hostedPaymentLink,
   money,
   placeOrder,
   previewCheckout,
+  startPayment,
   type CheckoutPreview,
   type CheckoutCommand,
 } from "../../api/checkout"
@@ -40,9 +44,19 @@ import {
   readRecovery,
   rememberCheckout,
   rememberOrder,
+  paymentOperation,
+  rememberPayment,
 } from "../../api/recovery"
 import PaymentPanel from "../payment-panel"
 import { nigeriaStates } from "../../nigeria-states"
+import {
+  createAddress,
+  findCreatedAddress,
+  getSavedAddresses,
+  updateAddress,
+  type AddressInput,
+  type SavedAddress,
+} from "../../api/addresses"
 
 function formatDeliveryDate(value: string) {
   const date = new Date(value)
@@ -122,6 +136,27 @@ function CheckoutStatus() {
   const state = useCart(),
     client = useQueryClient()
   const user = useAuthSession().data!.user!
+  const addressesQuery = useQuery({
+    queryKey: ["saved-addresses", user.id],
+    queryFn: getSavedAddresses,
+    refetchOnMount: "always",
+  })
+  const savedAddresses = useMemo(
+    () => addressesQuery.data ?? [],
+    [addressesQuery.data]
+  )
+  const defaultAddressId = savedAddresses.find(
+    (address) => address.isDefault
+  )?.id
+  const [selectedAddress, setSelectedAddress] = useState("")
+  const [formMode, setFormMode] = useState<"new" | "edit" | null>(null)
+  const [addressLabel, setAddressLabel] = useState("")
+  const [addressSaved, setAddressSaved] = useState(false)
+  const pendingCreation = useRef<{
+    input: AddressInput
+    previousIds: string[]
+  } | null>(null)
+  const manualSelection = useRef(false)
   const [recovery, setRecovery] = useState(() => readRecovery(user.id))
   const [order, setOrder] = useState<string>()
   const [preview, setPreview] = useState<{
@@ -140,21 +175,209 @@ function CheckoutStatus() {
     notes: "",
   })
   const [busy, setBusy] = useState(false)
+  const [defaultUpdating, setDefaultUpdating] = useState(false)
   const [error, setError] = useState("")
+  const [addressSaveWarning, setAddressSaveWarning] = useState("")
   const sending = useRef(false)
   const signature = JSON.stringify(state.cart)
   const ready = state.isReadyForCheckout
   const validPreview = preview && preview.signature === signature && ready
-  async function quote(values: CheckoutFormSchema) {
-    if (sending.current || !ready) return
+  const chooseAddress = useCallback(
+    (addressId: string) => {
+      setSelectedAddress(addressId)
+      setFormMode(null)
+      setAddressSaved(false)
+      setError("")
+      setAddressSaveWarning("")
+      setPreview(undefined)
+      const saved = savedAddresses.find((address) => address.id === addressId)
+      if (!saved) {
+        setAddressLabel("")
+        setFormValues((current) => ({
+          ...current,
+          name: user.name,
+          phone: user.phone ?? "",
+          phoneCountry: parsePhoneNumber(user.phone ?? "")?.country ?? "NG",
+          address: "",
+          city: "",
+          state: "",
+          postcode: null,
+          service: undefined,
+        }))
+        return
+      }
+      setAddressLabel(saved.label)
+      const phoneCountry =
+        parsePhoneNumber(saved.delivery.phone)?.country ??
+        saved.delivery.country
+      setFormValues((current) => ({
+        ...current,
+        name: saved.delivery.name,
+        phone: saved.delivery.phone,
+        phoneCountry,
+        address: saved.delivery.address,
+        city: saved.delivery.city,
+        state:
+          phoneCountry === "NG" &&
+          saved.delivery.state.toLowerCase().includes("federal capital")
+            ? "FCT"
+            : saved.delivery.state,
+        postcode: saved.delivery.postcode,
+        service: saved.delivery.service,
+      }))
+    },
+    [savedAddresses, user.name, user.phone]
+  )
+  useEffect(() => {
+    if (
+      !manualSelection.current &&
+      !selectedAddress &&
+      defaultAddressId &&
+      addressesQuery.data?.some((address) => address.id === defaultAddressId)
+    )
+      chooseAddress(defaultAddressId)
+  }, [addressesQuery.data, chooseAddress, defaultAddressId, selectedAddress])
+  async function makeDefaultAddress() {
+    const address = savedAddresses.find((entry) => entry.id === selectedAddress)
+    if (!address || address.isDefault || defaultUpdating || busy) return
+    setDefaultUpdating(true)
+    setError("")
+    try {
+      await updateAddress(address.id, {
+        label: address.label,
+        delivery: address.delivery,
+        isDefault: true,
+      })
+      await client.invalidateQueries({ queryKey: ["saved-addresses", user.id] })
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not set the default address."
+      )
+    } finally {
+      setDefaultUpdating(false)
+    }
+  }
+  async function saveEditedAddress(values: CheckoutFormSchema) {
+    const address = savedAddresses.find((entry) => entry.id === selectedAddress)
+    if (!address || sending.current) return
     sending.current = true
     setBusy(true)
     setError("")
+    try {
+      const updated = await updateAddress(address.id, {
+        label: addressLabel.trim() || address.label,
+        delivery: deliveryFromCheckoutForm(values),
+        isDefault: address.isDefault,
+      })
+      if (readSession().user?.id !== user.id) return
+      setFormValues(values)
+      setAddressLabel(updated.label)
+      setFormMode(null)
+      setAddressSaved(true)
+      setPreview(undefined)
+      client.setQueryData<SavedAddress[]>(
+        ["saved-addresses", user.id],
+        (current) =>
+          (current ?? []).map((entry) =>
+            entry.id === updated.id ? updated : entry
+          )
+      )
+      void client.invalidateQueries({ queryKey: ["saved-addresses", user.id] })
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not update the address."
+      )
+    } finally {
+      sending.current = false
+      setBusy(false)
+    }
+  }
+  async function quote(values: CheckoutFormSchema) {
+    if (sending.current || defaultUpdating || !ready) return
+    sending.current = true
+    setBusy(true)
+    setError("")
+    setAddressSaveWarning("")
     setFormValues(values)
     try {
-      const data = await previewCheckout(deliveryFromCheckoutForm(values))
-      if (readSession().user?.id === user.id)
+      const delivery = deliveryFromCheckoutForm(values)
+      if (!selectedAddress) {
+        const label =
+          addressLabel.trim() ||
+          (savedAddresses.length === 0
+            ? "Home"
+            : `Address ${savedAddresses.length + 1}`)
+        const input: AddressInput = {
+          label,
+          delivery,
+          ...(addressesQuery.isSuccess && savedAddresses.length === 0
+            ? { isDefault: true }
+            : {}),
+        }
+        let saved: SavedAddress | undefined
+        if (pendingCreation.current) {
+          try {
+            const latest = await getSavedAddresses()
+            if (readSession().user?.id !== user.id) return
+            client.setQueryData(["saved-addresses", user.id], latest)
+            input.isDefault = latest.length === 0 ? true : undefined
+            const pending = pendingCreation.current
+            const recovered = findCreatedAddress(
+              latest,
+              pending.previousIds,
+              pending.input
+            )
+            pendingCreation.current = null
+            if (
+              recovered &&
+              pending.input.label === input.label &&
+              JSON.stringify(pending.input.delivery) ===
+                JSON.stringify(input.delivery)
+            )
+              saved = recovered
+          } catch {
+            setAddressSaveWarning(
+              "Getty could not confirm whether this address was saved for future orders. You can still use it for this order."
+            )
+          }
+        }
+        if (!saved && !pendingCreation.current) {
+          try {
+            saved = await createAddress(input)
+          } catch {
+            pendingCreation.current = {
+              input,
+              previousIds: savedAddresses.map((address) => address.id),
+            }
+            setAddressSaveWarning(
+              "Getty could not confirm whether this address was saved for future orders. You can still use it for this order."
+            )
+          }
+        }
+        if (saved) {
+          if (readSession().user?.id !== user.id) return
+          client.setQueryData<SavedAddress[]>(
+            ["saved-addresses", user.id],
+            (current) => [
+              ...(current ?? []).filter((a) => a.id !== saved.id),
+              saved,
+            ]
+          )
+          setSelectedAddress(saved.id)
+          setAddressSaved(true)
+          manualSelection.current = true
+          void client.invalidateQueries({
+            queryKey: ["saved-addresses", user.id],
+          })
+        }
+      }
+      const data = await previewCheckout(delivery)
+      if (readSession().user?.id === user.id) {
         setPreview({ data, signature, notes: values.notes || null })
+        setFormMode(null)
+      }
     } catch (e) {
       setError(
         e instanceof Error
@@ -183,10 +406,31 @@ function CheckoutStatus() {
       const result = await placeOrder(command)
       rememberOrder(user.id, result.id)
       if (readSession().user?.id !== user.id) return
-      setOrder(result.id)
-      router.push(`/checkout/payment?order=${encodeURIComponent(result.id)}`)
       void client.invalidateQueries({ queryKey: ["cart", user.id] })
       void client.invalidateQueries({ queryKey: ["orders"] })
+      let continuePayment = Boolean(blockingCharge(result))
+      let immediateLink: string | null = null
+      if (!continuePayment && awaitingPayment(result)) {
+        try {
+          const operation = paymentOperation(user.id, result.id)
+          const payment = await startPayment(result.id, operation.token)
+          rememberPayment(user.id, result.id, operation.token, payment.id)
+          continuePayment = true
+          immediateLink = hostedPaymentLink(result, payment)
+        } catch {
+          // The order is already placed. The payment page can safely recover
+          // the saved operation or show a retry without another checkout.
+        }
+      }
+      if (readSession().user?.id !== user.id) return
+      if (immediateLink) {
+        window.location.assign(immediateLink)
+        return
+      }
+      setOrder(result.id)
+      router.push(
+        `/checkout/payment?order=${encodeURIComponent(result.id)}${continuePayment ? "&continue=1" : ""}`
+      )
     } catch (e) {
       const definitive =
         e instanceof GettyApiError &&
@@ -219,7 +463,7 @@ function CheckoutStatus() {
     return (
       <div className="site-container py-8 sm:py-12">
         <div className="mx-auto max-w-2xl">
-          <PaymentPanel orderId={order} />
+          <PaymentPanel orderId={order} autoContinue />
         </div>
       </div>
     )
@@ -353,6 +597,14 @@ function CheckoutStatus() {
           {error}
         </p>
       )}
+      {addressSaveWarning && (
+        <p
+          role="alert"
+          className="mb-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          {addressSaveWarning}
+        </p>
+      )}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.65fr)]">
         <section className="min-w-0 rounded-2xl border bg-white p-5 sm:p-8">
           <h2 className="flex items-center gap-3 text-xl font-semibold">
@@ -377,7 +629,10 @@ function CheckoutStatus() {
                 variant="outline"
                 className="mt-5"
                 disabled={busy}
-                onClick={() => setPreview(undefined)}
+                onClick={() => {
+                  setPreview(undefined)
+                  setFormMode(selectedAddress ? "edit" : "new")
+                }}
               >
                 Edit delivery details
               </Button>
@@ -389,67 +644,261 @@ function CheckoutStatus() {
               )}
             </div>
           ) : (
-            <ValidatedForm
-              schema={checkoutSchema}
-              defaultValues={formValues}
-              onSubmit={quote}
-              className="mt-6 space-y-5"
-            >
-              <fieldset disabled={busy} className="space-y-5">
-                <FormInputField
-                  name="name"
-                  label="Recipient name"
-                  autoComplete="shipping name"
-                  required
-                />
-                <PhoneNumberField
-                  countryName="phoneCountry"
-                  autoComplete="shipping tel-national"
-                />
-                <FormInputField
-                  name="address"
-                  label="Street address"
-                  autoComplete="shipping street-address"
-                  required
-                />
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <FormInputField
-                    name="city"
-                    label="City"
-                    autoComplete="shipping address-level2"
-                    required
-                  />
-                  <DeliveryStateField />
+            <div>
+              {!formMode && (
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    className="text-primary min-h-10 text-sm font-medium hover:underline"
+                    disabled={busy}
+                    onClick={() => {
+                      manualSelection.current = true
+                      chooseAddress("")
+                      setFormMode("new")
+                    }}
+                  >
+                    Add new address
+                  </button>
                 </div>
-                <FormInputField
-                  name="postcode"
-                  label="Postal code (optional)"
-                  autoComplete="shipping postal-code"
-                />
-                <div className="space-y-2">
+              )}
+              {addressesQuery.isPending && (
+                <p className="text-muted-foreground mt-5 text-sm">
+                  Loading saved addresses…
+                </p>
+              )}
+              {addressesQuery.isError && (
+                <p role="alert" className="mt-5 text-sm text-red-700">
+                  Saved addresses could not be loaded. You can add a new address
+                  or{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline"
+                    onClick={() => void addressesQuery.refetch()}
+                  >
+                    try again
+                  </button>
+                  .
+                </p>
+              )}
+              {savedAddresses.length > 0 && (
+                <div className="mb-5 space-y-2">
                   <label
-                    htmlFor="checkout-delivery-note"
+                    htmlFor="checkout-saved-address"
                     className="block text-sm font-medium text-[#414651]"
                   >
-                    Delivery note (optional)
+                    Saved delivery address
                   </label>
-                  <FormTextarea
-                    id="checkout-delivery-note"
-                    name="notes"
-                    rows={3}
-                    placeholder="Directions or instructions for your delivery"
-                    className="focus-visible:border-primary focus-visible:ring-primary/10 min-h-28 resize-y rounded-lg border-[#dce2de] bg-white px-3.5 py-3 text-base font-normal shadow-none transition-[border-color,box-shadow] placeholder:text-[#8b938e] hover:border-[#bac7be] focus-visible:ring-3 sm:text-sm"
-                  />
+                  <select
+                    id="checkout-saved-address"
+                    value={selectedAddress}
+                    onChange={(event) => {
+                      manualSelection.current = true
+                      chooseAddress(event.target.value)
+                    }}
+                    className="form-input h-13 w-full border-[#dce2de] bg-white pr-10 text-sm"
+                  >
+                    <option value="">Select a saved address</option>
+                    {savedAddresses.map((address) => (
+                      <option key={address.id} value={address.id}>
+                        {address.label}
+                        {address.id === defaultAddressId
+                          ? " (Default)"
+                          : ""} — {address.delivery.address},{" "}
+                        {address.delivery.city}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <Button
-                  type="submit"
-                  disabled={!ready || busy}
-                  className="w-full sm:w-auto"
+              )}
+              {addressSaved && (
+                <p role="status" className="mt-4 text-sm text-[#167b54]">
+                  Address saved and selected for this delivery.
+                </p>
+              )}
+              {selectedAddress && !formMode && (
+                <div className="mt-5 space-y-4 text-sm leading-6">
+                  <div>
+                    <p className="font-semibold">{formValues.name}</p>
+                    <p>{formValues.phone}</p>
+                    <p>{formValues.address}</p>
+                    <p>
+                      {formValues.city}, {formValues.state},{" "}
+                      {
+                        savedAddresses.find(
+                          (entry) => entry.id === selectedAddress
+                        )?.delivery.country
+                      }
+                      {formValues.postcode ? ` ${formValues.postcode}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <button
+                      type="button"
+                      className="text-primary min-h-10 font-medium hover:underline"
+                      disabled={busy}
+                      onClick={() => setFormMode("edit")}
+                    >
+                      Edit address
+                    </button>
+                    <button
+                      type="button"
+                      className="text-primary min-h-10 font-medium hover:underline disabled:cursor-default disabled:text-[#66786c] disabled:no-underline"
+                      disabled={
+                        selectedAddress === defaultAddressId ||
+                        defaultUpdating ||
+                        busy
+                      }
+                      onClick={() => void makeDefaultAddress()}
+                    >
+                      {selectedAddress === defaultAddressId
+                        ? "Default address"
+                        : defaultUpdating
+                          ? "Saving default…"
+                          : "Make default address"}
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      disabled={!ready || busy || defaultUpdating}
+                      onClick={() => void quote(formValues)}
+                    >
+                      {busy
+                        ? "Calculating delivery…"
+                        : "Review delivery & total"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {!selectedAddress && !formMode && !addressesQuery.isPending && (
+                <p className="text-muted-foreground mt-5 text-sm">
+                  Add a delivery address to review your total.
+                </p>
+              )}
+              {formMode && (
+                <ValidatedForm
+                  key={`${formMode}-${selectedAddress}`}
+                  schema={checkoutSchema}
+                  defaultValues={formValues}
+                  onSubmit={formMode === "edit" ? saveEditedAddress : quote}
+                  onChangeCapture={() => {
+                    manualSelection.current = true
+                  }}
+                  className="mt-6 space-y-5"
                 >
-                  {busy ? "Calculating delivery…" : "Review delivery & total"}
-                </Button>
-              </fieldset>
-            </ValidatedForm>
+                  <fieldset disabled={busy} className="space-y-5">
+                    <FormInputField
+                      name="name"
+                      label="Recipient name"
+                      autoComplete="shipping name"
+                      required
+                    />
+                    <PhoneNumberField
+                      countryName="phoneCountry"
+                      autoComplete="shipping tel-national"
+                    />
+                    <FormInputField
+                      name="address"
+                      label="Street address"
+                      autoComplete="shipping street-address"
+                      required
+                    />
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <FormInputField
+                        name="city"
+                        label="City"
+                        autoComplete="shipping address-level2"
+                        required
+                      />
+                      <DeliveryStateField />
+                    </div>
+                    <FormInputField
+                      name="postcode"
+                      label="Postal code (optional)"
+                      autoComplete="shipping postal-code"
+                    />
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="checkout-delivery-note"
+                        className="block text-sm font-medium text-[#414651]"
+                      >
+                        Delivery note (optional)
+                      </label>
+                      <FormTextarea
+                        id="checkout-delivery-note"
+                        name="notes"
+                        rows={3}
+                        placeholder="Directions or instructions for your delivery"
+                        className="focus-visible:border-primary focus-visible:ring-primary/10 min-h-28 resize-y rounded-lg border-[#dce2de] bg-white px-3.5 py-3 text-base font-normal shadow-none transition-[border-color,box-shadow] placeholder:text-[#8b938e] hover:border-[#bac7be] focus-visible:ring-3 sm:text-sm"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="checkout-address-label"
+                        className="block text-sm font-medium text-[#414651]"
+                      >
+                        Address label (optional)
+                      </label>
+                      <input
+                        id="checkout-address-label"
+                        className="form-input h-13 border-[#dce2de] bg-white text-sm"
+                        value={addressLabel}
+                        onChange={(event) =>
+                          setAddressLabel(event.target.value)
+                        }
+                        placeholder="Home, office or hospital"
+                        maxLength={80}
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        Leave blank to use{" "}
+                        {formMode === "edit"
+                          ? (savedAddresses.find(
+                              (entry) => entry.id === selectedAddress
+                            )?.label ?? "the current label")
+                          : savedAddresses.length
+                            ? `Address ${savedAddresses.length + 1}`
+                            : "Home"}
+                        .
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => {
+                          if (formMode === "new" && defaultAddressId)
+                            chooseAddress(defaultAddressId)
+                          else {
+                            if (formMode === "edit")
+                              setAddressLabel(
+                                savedAddresses.find(
+                                  (entry) => entry.id === selectedAddress
+                                )?.label ?? ""
+                              )
+                            setFormMode(null)
+                          }
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={!ready || busy || defaultUpdating}
+                      >
+                        {busy
+                          ? formMode === "edit"
+                            ? "Saving changes…"
+                            : "Saving address & calculating delivery…"
+                          : formMode === "edit"
+                            ? "Save address changes"
+                            : "Save address & review total"}
+                      </Button>
+                    </div>
+                  </fieldset>
+                </ValidatedForm>
+              )}
+            </div>
           )}
         </section>
         <aside className="min-w-0 rounded-2xl border bg-white p-5 sm:p-8">
@@ -533,7 +982,7 @@ function CheckoutStatus() {
               className="mt-6 w-full"
               onClick={() => void submit()}
             >
-              {busy ? "Placing order…" : "Place order"}
+              {busy ? "Preparing payment…" : "Proceed to payment"}
             </Button>
           )}
           {preview && !validPreview && (

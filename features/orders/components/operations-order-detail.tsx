@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { ArrowLeft, ArrowUpRight, Check, MapPin, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ContentError from "@/components/shared/content-error"
 import { OrdersSkeleton } from "@/components/shared/loading-skeletons"
@@ -18,6 +19,7 @@ import { formatOrderAmount } from "../utils/format-order-amount"
 import FulfilmentActionDialog, {
   type WorkflowSelection,
 } from "./fulfilment-action-dialog"
+import ParcelPhoto from "./parcel-photo"
 
 const nextLabels = {
   preparing: "Start preparing",
@@ -29,6 +31,58 @@ const custodyLabels = {
   receive: "Confirm receipt",
   "return-to-vendor": "Return to supplier",
 } as const
+const stages = [
+  { key: "placed", label: "Order placed", detail: "Order received by Getty" },
+  {
+    key: "preparing",
+    label: "Preparing",
+    detail: "Suppliers hand over the items",
+  },
+  {
+    key: "ready",
+    label: "Ready for delivery",
+    detail: "Items packed and checked",
+  },
+  {
+    key: "dispatched",
+    label: "Dispatched",
+    detail: "On the way to the customer",
+  },
+  {
+    key: "delivered",
+    label: "Delivered",
+    detail: "Handed over at the destination",
+  },
+] as const
+const eventLabels: Record<string, string> = {
+  placed: "Order placed",
+  "payment-started": "Payment started",
+  "charge-succeeded": "Payment received",
+  "charge-failed": "Payment failed",
+  "fulfilment-preparing": "Preparation started",
+  "fulfilment-ready": "Order ready",
+  "fulfilment-dispatched": "Order dispatched",
+  "fulfilment-delivered": "Order delivered",
+  "supply-received": "Supplier items received",
+}
+function formatDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("en-NG", {
+        timeZone: "Africa/Lagos",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+}
+function actorName(
+  actor: string | { name?: string; id?: string } | null | undefined
+) {
+  if (!actor) return null
+  if (typeof actor === "string")
+    return /^[\da-f]{8}-[\da-f-]{27,}$/i.test(actor) ? "Getty team" : actor
+  return actor.name || "Getty team"
+}
 
 export default function OperationsOrderDetail({
   orderId,
@@ -75,127 +129,248 @@ export default function OperationsOrderDetail({
   const received = active.filter(
     (item) => item.supply.status === "received"
   ).length
+  const awaitingReceipt = active.filter(
+    (item) => item.supply.status === "supplied"
+  ).length
+  const awaitingSupplier = active.filter(
+    (item) =>
+      item.supply.status === "pending" || item.supply.status === "accepted"
+  ).length
+  const currentStage = stages.findIndex(
+    (stage) => stage.key === order.fulfilment
+  )
   const sellerNumbers = new Map<string, number>()
   for (const item of order.items)
     if (item.seller && !sellerNumbers.has(item.seller))
       sellerNumbers.set(item.seller, sellerNumbers.size + 1)
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="mx-auto max-w-[1440px] min-w-0 space-y-6 pb-10">
       <Link
         href={canManage ? "/admin/fulfilment" : "/admin/orders"}
-        className="text-primary inline-flex min-h-10 items-center text-sm font-medium"
+        className="text-primary inline-flex min-h-10 items-center gap-2 text-sm font-medium hover:underline"
       >
-        ← Back to {canManage ? "order fulfilment" : "orders"}
+        <ArrowLeft className="size-4" aria-hidden /> Back to{" "}
+        {canManage ? "order fulfilment" : "orders"}
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-muted-foreground text-xs">Order reference</p>
-          <h1 className="mt-1 text-xl font-semibold break-all">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-6">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-xs font-semibold tracking-[0.14em] uppercase">
+            {canManage ? "Fulfilment order" : "Order details"}
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight break-all sm:text-3xl">
             {order.orderCode ?? order.reference ?? order.id}
           </h1>
           {order.placed && (
-            <p className="text-muted-foreground mt-1 text-sm">
-              Placed{" "}
-              {new Date(order.placed).toLocaleString("en-NG", {
-                timeZone: "Africa/Lagos",
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+            <p className="text-muted-foreground mt-2 text-sm">
+              Placed {formatDate(order.placed)} · Africa/Lagos
             </p>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+            {order.status && (
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">Order</span>
+                <StatusBadge status={order.status} />
+              </span>
+            )}
+            <span className="flex items-center gap-2">
+              <span className="text-muted-foreground">Delivery</span>
+              <StatusBadge status={order.fulfilment} />
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {order.status && <StatusBadge status={order.status} />}
-          <StatusBadge status={order.fulfilment} />
-          {!canManage && (
-            <Link
-              href={`/admin/fulfilment/${encodeURIComponent(order.id)}`}
-              className="bg-primary inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold text-white"
-            >
-              Update order status
-            </Link>
-          )}
-        </div>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_19rem]">
-        <div className="min-w-0 space-y-4">
-          <section className="rounded-xl border bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        {canManage && next ? (
+          <Button
+            onClick={() =>
+              setSelection({ action: next, version: order.version })
+            }
+          >
+            {nextLabels[next]}
+          </Button>
+        ) : !canManage ? (
+          <Link
+            href={`/admin/fulfilment/${encodeURIComponent(order.id)}`}
+            className="bg-primary inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Update order status <ArrowUpRight className="size-4" aria-hidden />
+          </Link>
+        ) : null}
+      </header>
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,21rem)]">
+        <div className="min-w-0 space-y-5">
+          <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-5 sm:px-6">
               <div>
-                <h2 className="font-semibold">Getty delivery</h2>
+                <h2 className="text-lg font-semibold">Getty delivery</h2>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  {received} of {active.length} active items received at Getty.
+                  Follow the order from placement to delivery.
                 </p>
               </div>
-              {canManage && next && (
-                <Button
-                  onClick={() =>
-                    setSelection({ action: next, version: order.version })
-                  }
-                >
-                  {nextLabels[next]}
-                </Button>
+              {currentStage >= 0 && (
+                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                  Stage {currentStage + 1} of {stages.length}
+                </span>
               )}
             </div>
-            <ol
-              className="mt-5 grid gap-2 sm:grid-cols-5"
-              aria-label="Delivery stages"
-            >
-              {(
-                [
-                  "placed",
-                  "preparing",
-                  "ready",
-                  "dispatched",
-                  "delivered",
-                ] as const
-              ).map((stage, index) => (
-                <li
-                  key={stage}
-                  className={`rounded-lg border px-3 py-2 text-sm capitalize ${["placed", "preparing", "ready", "dispatched", "delivered"].indexOf(order.fulfilment) >= index ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "text-muted-foreground"}`}
-                >
-                  {stage}
-                </li>
-              ))}
-            </ol>
-            {order.tracking &&
-              (order.tracking.carrier || order.tracking.reference) && (
-                <p className="mt-4 text-sm">
-                  {order.tracking.carrier} · {order.tracking.reference}
-                </p>
-              )}
+            <div className="grid gap-7 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_minmax(13rem,18rem)]">
+              <ol className="space-y-0" aria-label="Delivery stages">
+                {stages.map((stage, index) => {
+                  const complete = currentStage > index
+                  const current = currentStage === index
+                  return (
+                    <li
+                      key={stage.key}
+                      className="relative flex gap-4 pb-7 last:pb-0"
+                    >
+                      {index < stages.length - 1 && (
+                        <span
+                          aria-hidden
+                          className={`absolute top-9 bottom-0 left-[17px] w-px ${complete ? "bg-emerald-500" : "bg-slate-200"}`}
+                        />
+                      )}
+                      <span
+                        aria-current={current ? "step" : undefined}
+                        className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${current ? "border-emerald-700 bg-emerald-700 text-white ring-4 ring-emerald-100" : complete ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-white text-slate-500"}`}
+                      >
+                        {complete ? (
+                          <Check className="size-4" aria-hidden />
+                        ) : (
+                          index + 1
+                        )}
+                      </span>
+                      <div className="min-w-0 pt-0.5">
+                        <p
+                          className={`font-semibold ${current ? "text-emerald-800" : "text-slate-800"}`}
+                        >
+                          {stage.label}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5 text-sm">
+                          {stage.detail}
+                        </p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+              <div className="space-y-3 md:border-l md:pl-6">
+                <div className="rounded-xl bg-[#f3f8f4] p-4">
+                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                    Current stage
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-emerald-950">
+                    {stages[currentStage]?.label ?? order.fulfilment}
+                  </p>
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    {received} of {active.length} active{" "}
+                    {active.length === 1 ? "item" : "items"} received at Getty
+                  </p>
+                </div>
+                {canManage &&
+                  order.fulfilment === "preparing" &&
+                  received < active.length && (
+                    <div className="space-y-2 text-sm leading-6">
+                      <p className="text-muted-foreground">
+                        Getty requires every active item to be received before
+                        the order can be marked ready. The parcel photo is
+                        optional.
+                      </p>
+                      {awaitingReceipt > 0 && (
+                        <p className="text-muted-foreground">
+                          {awaitingReceipt}{" "}
+                          {awaitingReceipt === 1 ? "item is" : "items are"}{" "}
+                          available to confirm as received.
+                        </p>
+                      )}
+                      {awaitingSupplier > 0 && (
+                        <p className="text-muted-foreground">
+                          {awaitingSupplier}{" "}
+                          {awaitingSupplier === 1 ? "item is" : "items are"}{" "}
+                          awaiting supplier handover.
+                        </p>
+                      )}
+                      <a
+                        href="#supplier-handovers"
+                        className="text-primary inline-flex min-h-9 items-center gap-1 font-semibold hover:underline"
+                      >
+                        View supplier handovers{" "}
+                        <ArrowUpRight className="size-4" aria-hidden />
+                      </a>
+                    </div>
+                  )}
+                {canManage &&
+                  (order.fulfilment === "preparing" ||
+                    order.fulfilment === "ready") &&
+                  !order.parcelPhoto && (
+                    <p className="text-muted-foreground text-sm leading-6">
+                      You can add a package photo when marking the order ready
+                      or dispatching it.
+                    </p>
+                  )}
+                {order.tracking &&
+                  (order.tracking.carrier || order.tracking.reference) && (
+                    <div className="rounded-xl border p-4 text-sm">
+                      <p className="flex items-center gap-2 font-semibold">
+                        <Truck className="text-primary size-4" aria-hidden />{" "}
+                        Tracking
+                      </p>
+                      {order.tracking.carrier && (
+                        <p className="mt-2">{order.tracking.carrier}</p>
+                      )}
+                      {order.tracking.reference && (
+                        <p className="text-muted-foreground mt-1 break-all">
+                          {order.tracking.reference}
+                        </p>
+                      )}
+                    </div>
+                  )}
+              </div>
+            </div>
           </section>
-          <section className="rounded-xl border bg-white p-5">
-            <h2 className="font-semibold">
-              {canManage ? "Supplier handovers" : "Order items"}
-            </h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {canManage
-                ? "Confirm physical receipt before marking the order ready."
-                : "Supplier custody and handover status for this order."}
-            </p>
-            <div className="mt-4 space-y-5">
+          <section
+            id="supplier-handovers"
+            className="scroll-mt-24 overflow-hidden rounded-2xl border bg-white shadow-sm"
+          >
+            <div className="flex flex-wrap items-end justify-between gap-2 border-b px-5 py-5 sm:px-6">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  {canManage ? "Supplier handovers" : "Order items"}
+                </h2>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {canManage
+                    ? "Confirm physical receipt of each item."
+                    : "Items and supplier custody for this order."}
+                </p>
+              </div>
+              <span className="text-muted-foreground text-sm">
+                {received}/{active.length} received
+              </span>
+            </div>
+            <div className="divide-y px-5 sm:px-6">
               {[...sellerNumbers.entries()].map(([seller, number]) => (
-                <div key={seller}>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#f5f9f6] px-3 py-2 text-sm font-semibold">
-                    <h3>Supplier {number}</h3>
+                <div key={seller} className="py-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
+                    <h3 className="tracking-wide text-slate-700">
+                      Supplier {number}
+                    </h3>
                     <Link
                       href={`/admin/vendors/${encodeURIComponent(seller)}`}
-                      className="text-primary text-xs font-medium"
+                      className="text-primary inline-flex min-h-8 items-center gap-1 text-sm font-medium hover:underline"
                     >
-                      View supplier
+                      View supplier{" "}
+                      <ArrowUpRight className="size-3.5" aria-hidden />
                     </Link>
                   </div>
-                  <div className="divide-y">
+                  <div className="divide-y divide-slate-100">
                     {order.items
                       .filter((item) => item.seller === seller)
                       .map((item) => (
                         <article
                           key={item.id}
-                          className="flex flex-wrap items-center justify-between gap-4 py-4"
+                          className="flex flex-wrap items-start justify-between gap-4 py-4 last:pb-0"
                         >
-                          <div className="min-w-0">
-                            <h4 className="font-medium">{item.name}</h4>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-semibold text-slate-900">
+                              {item.name}
+                            </h4>
                             <p className="text-muted-foreground mt-1 text-sm">
                               Quantity {item.quantity}
                               {item.pack && item.unit
@@ -221,15 +396,20 @@ export default function OperationsOrderDetail({
                                     .join(" · ")}
                                 </p>
                               )}
-                            <p className="text-muted-foreground mt-1 text-sm">
-                              Custody:{" "}
-                              <span className="font-medium capitalize">
-                                {item.supply.status}
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                              <span
+                                className={`rounded-full px-2.5 py-1 font-semibold capitalize ${item.supply.status === "received" ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
+                              >
+                                {item.supply.status === "received"
+                                  ? "Received at Getty"
+                                  : item.supply.status}
                               </span>
-                              {item.supply.reference
-                                ? ` · ${item.supply.reference}`
-                                : ""}
-                            </p>
+                              {item.supply.reference && (
+                                <span className="text-muted-foreground break-all">
+                                  Ref: {item.supply.reference}
+                                </span>
+                              )}
+                            </div>
                             {item.price != null && (
                               <p className="mt-2 text-sm">
                                 Unit price:{" "}
@@ -249,15 +429,15 @@ export default function OperationsOrderDetail({
                               </p>
                             )}
                           </div>
-                          {item.total != null && (
-                            <p className="font-semibold tabular-nums">
-                              {formatOrderAmount(
-                                item.total,
-                                order.currency ?? "NGN"
-                              )}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-col items-start gap-2 sm:items-end">
+                            {item.total != null && (
+                              <p className="font-semibold tabular-nums">
+                                {formatOrderAmount(
+                                  item.total,
+                                  order.currency ?? "NGN"
+                                )}
+                              </p>
+                            )}
                             {(canManage
                               ? operationsSupplyActions(order, item)
                               : []
@@ -265,6 +445,7 @@ export default function OperationsOrderDetail({
                               <Button
                                 key={action}
                                 variant="outline"
+                                size="sm"
                                 onClick={() =>
                                   setSelection({
                                     action,
@@ -285,7 +466,7 @@ export default function OperationsOrderDetail({
               ))}
               {order.items.some((item) => !item.seller) && (
                 <div>
-                  <h3 className="rounded-lg bg-[#f5f9f6] px-3 py-2 text-sm font-semibold">
+                  <h3 className="py-3 text-sm font-semibold text-slate-700">
                     Other items
                   </h3>
                   {order.items
@@ -299,52 +480,68 @@ export default function OperationsOrderDetail({
               )}
             </div>
           </section>
-          <section className="rounded-xl border bg-white p-5">
-            <h2 className="font-semibold">Order history</h2>
+          <section className="rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-lg font-semibold">Activity</h2>
             {!order.history?.length ? (
               <p className="text-muted-foreground mt-3 text-sm">
                 No events recorded yet.
               </p>
             ) : (
-              <ol className="mt-4 space-y-4 border-l pl-5">
+              <ol className="mt-5 space-y-0">
                 {[...order.history]
                   .sort((a, b) => Date.parse(b.entry) - Date.parse(a.entry))
-                  .map((event) => (
-                    <li key={event.id}>
-                      <p className="font-medium capitalize">
-                        {event.action.replaceAll("-", " ")}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {new Date(event.entry).toLocaleString("en-NG", {
-                          timeZone: "Africa/Lagos",
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                        {event.actor
-                          ? ` · ${typeof event.actor === "string" ? event.actor : (event.actor.name ?? "Staff")}`
-                          : ""}
-                      </p>
-                      {(event.before || event.after) && (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {event.before ?? "—"} → {event.after ?? "—"}
+                  .map((event, index, events) => (
+                    <li
+                      key={event.id}
+                      className="relative flex gap-4 pb-6 last:pb-0"
+                    >
+                      {index < events.length - 1 && (
+                        <span
+                          aria-hidden
+                          className="absolute top-4 bottom-0 left-[5px] w-px bg-slate-200"
+                        />
+                      )}
+                      <span
+                        aria-hidden
+                        className={`relative z-10 mt-1.5 size-[11px] shrink-0 rounded-full ${index === 0 ? "bg-emerald-600 ring-4 ring-emerald-100" : "border-2 border-slate-300 bg-white"}`}
+                      />
+                      <div className="min-w-0 flex-1 sm:flex sm:justify-between sm:gap-4">
+                        <div>
+                          <p className="font-medium capitalize">
+                            {eventLabels[event.action] ??
+                              event.action.replaceAll("-", " ")}
+                          </p>
+                          {(event.before || event.after) && (
+                            <p className="text-muted-foreground mt-1 text-sm capitalize">
+                              {event.before ?? "—"} → {event.after ?? "—"}
+                            </p>
+                          )}
+                          {event.reason && (
+                            <p className="mt-1 text-sm">{event.reason}</p>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground mt-1 shrink-0 text-xs sm:mt-0 sm:text-right">
+                          {formatDate(event.entry)}
+                          {actorName(event.actor)
+                            ? ` · ${actorName(event.actor)}`
+                            : ""}
                         </p>
-                      )}
-                      {event.reason && (
-                        <p className="mt-1 text-sm">{event.reason}</p>
-                      )}
+                      </div>
                     </li>
                   ))}
               </ol>
             )}
           </section>
         </div>
-        <aside className="min-w-0 space-y-4">
-          <section className="rounded-xl border bg-white p-5">
-            <h2 className="font-semibold">Delivery destination</h2>
+        <aside className="min-w-0 space-y-5">
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <MapPin className="text-primary size-4" aria-hidden /> Delivery
+              destination
+            </h2>
             {order.delivery ? (
-              <address className="mt-3 space-y-1 text-sm not-italic">
-                <p className="font-medium">{order.delivery.name}</p>
-                <p>{order.delivery.phone}</p>
+              <address className="mt-4 space-y-1 text-sm leading-6 not-italic">
+                <p className="font-semibold">{order.delivery.name}</p>
                 <p>{order.delivery.address}</p>
                 <p>
                   {[
@@ -356,23 +553,33 @@ export default function OperationsOrderDetail({
                     .filter(Boolean)
                     .join(", ")}
                 </p>
+                {order.delivery.phone && (
+                  <a
+                    className="text-primary inline-block pt-1 hover:underline"
+                    href={`tel:${order.delivery.phone}`}
+                  >
+                    {order.delivery.phone}
+                  </a>
+                )}
               </address>
             ) : (
               <p className="text-muted-foreground mt-3 text-sm">
                 No delivery contact returned.
               </p>
             )}
+            {order.notes && (
+              <div className="mt-4 border-t pt-4">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  Delivery note
+                </p>
+                <p className="mt-2 text-sm whitespace-pre-wrap">
+                  {order.notes}
+                </p>
+              </div>
+            )}
           </section>
-          {order.notes && (
-            <section className="rounded-xl border bg-white p-5">
-              <h2 className="font-semibold">Delivery note</h2>
-              <p className="text-muted-foreground mt-3 text-sm whitespace-pre-wrap">
-                {order.notes}
-              </p>
-            </section>
-          )}
           {order.total != null && (
-            <section className="rounded-xl border bg-white p-5">
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <h2 className="font-semibold">Order summary</h2>
               <dl className="mt-4 space-y-2 text-sm">
                 {(
@@ -392,7 +599,7 @@ export default function OperationsOrderDetail({
                     </div>
                   )
                 )}
-                <div className="flex justify-between gap-3 border-t pt-3 font-semibold">
+                <div className="flex justify-between gap-3 border-t pt-4 text-base font-semibold">
                   <dt>Total</dt>
                   <dd className="tabular-nums">
                     {formatOrderAmount(order.total, order.currency ?? "NGN")}
@@ -401,8 +608,11 @@ export default function OperationsOrderDetail({
               </dl>
             </section>
           )}
+          {order.parcelPhoto && (
+            <ParcelPhoto orderId={order.id} photo={order.parcelPhoto} />
+          )}
           {order.payments && order.payments.length > 0 && (
-            <section className="rounded-xl border bg-white p-5">
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <h2 className="font-semibold">Payments</h2>
               <ul className="mt-3 divide-y text-sm">
                 {order.payments.map((payment) => (

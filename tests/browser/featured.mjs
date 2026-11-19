@@ -192,6 +192,18 @@ try {
     .getByLabel("Published product", { exact: true })
     .selectOption(productId)
   await createForm
+    .getByRole("button", { name: "Use product photo 1: chair.webp" })
+    .waitFor()
+  await createForm.getByLabel("Display order").waitFor()
+  assert.equal(await createForm.getByLabel("Display order").inputValue(), "1")
+  assert.equal(
+    await createForm
+      .getByRole("button", { name: "Use product photo 1: chair.webp" })
+      .getAttribute("aria-pressed"),
+    "true"
+  )
+  assert.equal(storageAttempts, 0)
+  await createForm
     .getByLabel("Caption", { exact: true })
     .fill("Supplies for everyday care")
   await createForm.getByLabel("Choose advert image").setInputFiles({
@@ -202,25 +214,17 @@ try {
       "base64"
     ),
   })
-  await createForm.getByText("Ready. Upload the image before saving.").waitFor()
-  assert.equal(
-    storageAttempts,
-    0,
-    "Selection only initiates; it must not send storage bytes"
-  )
-  await createForm
-    .getByRole("button", { name: "Upload image", exact: true })
-    .click()
   await createForm
     .getByText("The image could not be uploaded. Please try again.")
     .waitFor()
+  assert.equal(storageAttempts, 1)
   assert.equal(
     calls.filter((c) => c.path === "/getty/v1/featured" && c.method === "POST")
       .length,
     0
   )
   await createForm
-    .getByRole("button", { name: "Upload image", exact: true })
+    .getByRole("button", { name: "Retry image upload", exact: true })
     .click()
   await createForm
     .getByText("Image uploaded. Save the featured product to finish.")
@@ -268,7 +272,7 @@ try {
     caption: "Supplies for everyday care",
     starts: "2099-10-15T09:00:00+01:00",
     ends: "2099-10-22T23:59:00+01:00",
-    ordinal: 0,
+    ordinal: 1,
   })
   const dialog = page.getByRole("dialog")
   await page.getByRole("button", { name: "Edit", exact: true }).click()

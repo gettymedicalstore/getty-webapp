@@ -18,6 +18,7 @@ import {
   saveProductResource,
   deleteProductResource,
   type ProductRecord,
+  type ProductReadScope,
 } from "../api/product-management"
 import {
   DeleteProductItem,
@@ -32,12 +33,14 @@ import {
 
 export default function ProductTaxAssignments({
   product,
+  readScope = "tenant",
 }: {
   product: string
+  readScope?: ProductReadScope
 }) {
   const query = useQuery({
-    queryKey: ["managed-product", product, "taxes"],
-    queryFn: () => getProductResource(product, "taxes"),
+    queryKey: ["managed-product", product, readScope, "taxes"],
+    queryFn: () => getProductResource(product, "taxes", readScope),
   })
   const [open, setOpen] = useState(false)
   const [remove, setRemove] = useState<ProductRecord | null>(null)

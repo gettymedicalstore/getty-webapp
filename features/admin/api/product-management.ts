@@ -3,6 +3,8 @@ import { apiData } from "@/lib/api/data"
 import { apiRequest, GettyApiError } from "@/lib/api/client"
 
 const base = "/getty/v1/product/products"
+const reviewBase = "/getty/v1/product/reviews"
+export type ProductReadScope = "tenant" | "admin"
 const id = z.string().trim().min(1)
 const text = z.string().trim().min(1)
 const optionalText = z.string().trim().nullable()
@@ -45,11 +47,16 @@ function productPath(product: string) {
 }
 
 export async function getManagedProduct(
-  product: string
+  product: string,
+  scope: ProductReadScope = "tenant"
 ): Promise<ManagedProduct> {
+  const path =
+    scope === "admin"
+      ? `${reviewBase}/${encodeURIComponent(validated(id, product, "Select a product."))}`
+      : productPath(product)
   const data = validated(
     productSchema,
-    await apiData(productPath(product)),
+    await apiData(path),
     "The product response is incomplete.",
     502
   )
@@ -66,17 +73,23 @@ export async function approveManagedProduct(product: string) {
 
 export function getProductResource(
   product: string,
-  resource: "detail"
+  resource: "detail",
+  scope?: ProductReadScope
 ): Promise<Record<string, unknown> | null>
 export function getProductResource(
   product: string,
-  resource: "variants" | "specifications" | "taxes"
+  resource: "variants" | "specifications" | "taxes",
+  scope?: ProductReadScope
 ): Promise<ProductRecord[]>
 export async function getProductResource(
   product: string,
-  resource: ProductResource
+  resource: ProductResource,
+  scope: ProductReadScope = "tenant"
 ) {
-  const data = await apiData(`${productPath(product)}/${resource}`)
+  const data =
+    scope === "admin"
+      ? (await getManagedProduct(product, scope))[resource]
+      : await apiData(`${productPath(product)}/${resource}`)
   return resource === "detail"
     ? validated(
         detail,

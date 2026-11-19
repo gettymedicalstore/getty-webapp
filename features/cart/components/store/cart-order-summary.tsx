@@ -100,7 +100,7 @@ export default function CartOrderSummary({ items }: { items: CartItem[] }) {
           <LockKeyhole className="mt-0.5 size-4 shrink-0" />
           {session.data?.user?.role === "customer"
             ? "Prices and availability are confirmed when you order."
-            : "Sign in with a customer account at checkout. Prices and availability are confirmed when you order."}
+            : "Sign in to checkout."}
         </p>
       )}
     </aside>

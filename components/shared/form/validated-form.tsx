@@ -20,6 +20,7 @@ import {
 } from "react-hook-form"
 import type { z } from "zod"
 import InputField from "./input-field"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { withoutNativeConstraints } from "./without-native-constraints"
@@ -162,6 +163,41 @@ export function FormInput({
           field.onBlur()
           onBlur?.(event)
         }}
+      />
+      <FieldError id={errorId} message={fieldState.error?.message} />
+    </span>
+  )
+}
+
+export function FormCheckbox({
+  name,
+  id: providedId,
+  className,
+  disabled,
+}: {
+  name: string
+  id?: string
+  className?: string
+  disabled?: boolean
+}) {
+  const { field, fieldState } = useController({ name, defaultValue: false })
+  const generatedId = useId()
+  const id = providedId ?? generatedId
+  const errorId = `${id}-error`
+
+  return (
+    <span className="block shrink-0">
+      <Checkbox
+        id={id}
+        name={field.name}
+        inputRef={field.ref}
+        checked={Boolean(field.value)}
+        onCheckedChange={field.onChange}
+        onBlur={field.onBlur}
+        disabled={disabled}
+        aria-invalid={Boolean(fieldState.error)}
+        aria-describedby={fieldState.error ? errorId : undefined}
+        className={className}
       />
       <FieldError id={errorId} message={fieldState.error?.message} />
     </span>

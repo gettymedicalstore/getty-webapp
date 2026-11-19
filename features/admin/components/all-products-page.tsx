@@ -146,7 +146,13 @@ const columns: ColumnDef<AllVendorProduct, unknown>[] = [
   },
 ]
 
-export default function AllProductsPage() {
+export default function AllProductsPage({
+  vendorId,
+  vendorName,
+}: {
+  vendorId?: string
+  vendorName?: string
+} = {}) {
   const [filters, setFilters] = useState(emptyFilters)
   const [page, setPage] = useState<{
     cursor: ProductCursor
@@ -156,12 +162,14 @@ export default function AllProductsPage() {
   const vendors = useQuery({
     queryKey: ["featured", "vendor-options"],
     queryFn: getVendorOptions,
+    enabled: !vendorId,
   })
   const products = useQuery({
-    queryKey: ["admin", "all-products", filters, page],
+    queryKey: ["admin", "all-products", vendorId ?? "", filters, page],
     queryFn: () =>
       getAllProducts({
         ...filters,
+        vendor: vendorId ?? filters.vendor,
         cursor: page.cursor,
         navigation: page.navigation,
       }),
@@ -178,19 +186,33 @@ export default function AllProductsPage() {
     setFilters(values)
     setPage({ cursor: 0, navigation: "next", index: 0 })
   }
-  const filtered = Boolean(filters.vendor || filters.status || filters.search)
+  const filtered = Boolean(
+    (!vendorId && filters.vendor) || filters.status || filters.search
+  )
   return (
     <div className="min-w-0 space-y-6">
-      <PageHeading
-        title="All products"
-        description="Browse and review products across all vendors."
-      />
+      {vendorId ? (
+        <div>
+          <h2 className="text-lg font-semibold text-[#2b4032]">
+            Vendor products
+          </h2>
+          <p className="mt-1 text-sm text-[#5e6f63]">
+            Browse products listed by {vendorName || "this vendor"}.
+          </p>
+        </div>
+      ) : (
+        <PageHeading title="All products" />
+      )}
       <ValidatedForm
         schema={allProductFiltersSchema}
         values={filters}
         autoSubmit={300}
         onSubmit={changeFilters}
-        className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_12rem_auto]"
+        className={`grid min-w-0 gap-3 sm:grid-cols-2 ${
+          vendorId
+            ? "xl:grid-cols-[minmax(0,1fr)_12rem_auto]"
+            : "xl:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_12rem_auto]"
+        }`}
       >
         <div className="relative sm:col-span-2 xl:col-span-1">
           <Search
@@ -200,28 +222,32 @@ export default function AllProductsPage() {
           <FormInput
             name="search"
             type="search"
-            aria-label="Search all products"
+            aria-label={
+              vendorId ? "Search vendor products" : "Search all products"
+            }
             placeholder="Search products"
             className={`${fieldClass} pl-10`}
           />
         </div>
-        <div className="relative min-w-0">
-          <FormSelect
-            name="vendor"
-            aria-label="Filter by vendor"
-            className={fieldClass}
-            disabled={vendors.isPending || vendors.isError}
-          >
-            <option value="">
-              {vendors.isPending ? "Loading vendors…" : "All vendors"}
-            </option>
-            {vendors.data?.map((vendor) => (
-              <option key={vendor.id} value={vendor.id}>
-                {vendor.name}
+        {!vendorId && (
+          <div className="relative min-w-0">
+            <FormSelect
+              name="vendor"
+              aria-label="Filter by vendor"
+              className={fieldClass}
+              disabled={vendors.isPending || vendors.isError}
+            >
+              <option value="">
+                {vendors.isPending ? "Loading vendors…" : "All vendors"}
               </option>
-            ))}
-          </FormSelect>
-        </div>
+              {vendors.data?.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.name}
+                </option>
+              ))}
+            </FormSelect>
+          </div>
+        )}
         <div className="relative min-w-0">
           <FormSelect
             name="status"
@@ -245,7 +271,7 @@ export default function AllProductsPage() {
           </Button>
         )}
       </ValidatedForm>
-      {vendors.isError && (
+      {!vendorId && vendors.isError && (
         <div
           role="alert"
           className="flex flex-wrap items-center gap-3 text-sm text-[#5e6f63]"
@@ -270,7 +296,7 @@ export default function AllProductsPage() {
         />
       ) : (
         <AdminDataTable
-          label="All vendors’ products"
+          label={vendorId ? "Vendor products" : "All vendors’ products"}
           columns={columns}
           data={products.data.records}
           total={products.data.records.length}
@@ -288,8 +314,12 @@ export default function AllProductsPage() {
               </p>
               <p>
                 {filtered
-                  ? "Try another search, vendor or status."
-                  : "Products from vendors will appear here."}
+                  ? vendorId
+                    ? "Try another search or status."
+                    : "Try another search, vendor or status."
+                  : vendorId
+                    ? "This vendor has no products yet."
+                    : "Products from vendors will appear here."}
               </p>
             </div>
           }

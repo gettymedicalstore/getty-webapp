@@ -4,7 +4,7 @@ import { GETTY_API_BASE_URL } from "@/lib/api/config"
 import { sendGettyRequest, unwrapGettyResponse } from "@/lib/api/transport"
 import { SessionTokensSchema } from "../schemas/token-schema"
 import {
-  markRefreshRejected,
+  clearSession,
   syncSession,
   updateSessionTokens,
   credentialsChanged,
@@ -16,6 +16,7 @@ const refreshResponse = z.object({
   tokens: SessionTokensSchema.optional(),
 })
 const pending = new Map<string, Promise<SessionSnapshot>>()
+const lockWaitMs = 3000
 const rejectedRefresh = () =>
   new GettyApiError(
     "We couldn’t renew your session. Please sign in again to restore account access.",
@@ -38,7 +39,8 @@ async function renew(expected: SessionSnapshot): Promise<SessionSnapshot> {
   const session = currentSession(expected)
   // Another request or browser tab may already have renewed this login.
   if (credentialsChanged(expected, session)) return session
-  if (session.refreshRejected) throw rejectedRefresh()
+  // Older sessions may still carry a persisted rejection marker. A new 401
+  // must attempt renewal once instead of treating that marker as a response.
   // The backend authenticates renewal using its cookies, including HttpOnly
   // cookies that browser JavaScript cannot read. Follow the supplied adapter.
   const result = await sendGettyRequest("/auth/getty/refresh", {
@@ -49,10 +51,7 @@ async function renew(expected: SessionSnapshot): Promise<SessionSnapshot> {
   const latest = currentSession(session)
   if (credentialsChanged(session, latest)) return latest
 
-  // A rejection must not erase a login or cause a redirect loop. Remember it so
-  // subsequent queries and other tabs do not repeat the same failing renewal.
   if (result.status === 401 || result.status === 403) {
-    markRefreshRejected(session)
     throw rejectedRefresh()
   }
   const body =
@@ -69,6 +68,38 @@ async function renew(expected: SessionSnapshot): Promise<SessionSnapshot> {
   return currentSession(session)
 }
 
+async function renewWithLock(
+  expected: SessionSnapshot,
+  sessionId: string
+): Promise<SessionSnapshot> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined
+  if (!locks) return renew(expected)
+
+  // A suspended tab can hold an older lock. Bound the wait so a cart 401 still
+  // reaches the refresh endpoint; keep different logins out of each other's queue.
+  const controller = new AbortController()
+  let entered = false
+  const timeout = setTimeout(() => controller.abort(), lockWaitMs)
+  try {
+    return await locks.request(
+      `getty-session-refresh:${GETTY_API_BASE_URL}:${sessionId}`,
+      { signal: controller.signal },
+      () => {
+        entered = true
+        clearTimeout(timeout)
+        return renew(expected)
+      }
+    )
+  } catch (error) {
+    // Lock acquisition is only coordination. A failed or timed-out lock must
+    // not suppress renewal. Never repeat a refresh that already began.
+    if (entered) throw error
+    return renew(expected)
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 /** Share renewal within a tab, and across tabs where Web Locks are available. */
 export function refreshSession(
   expected: SessionSnapshot
@@ -79,17 +110,17 @@ export function refreshSession(
   const existing = pending.get(sessionId)
   if (existing) return existing
 
-  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined
-  const renewal = Promise.resolve(
-    locks
-      ? locks.request(`getty-session-refresh:${GETTY_API_BASE_URL}`, () =>
-          renew(expected)
-        )
-      : renew(expected)
-  )
-  const shared = renewal.finally(() => {
-    if (pending.get(sessionId) === shared) pending.delete(sessionId)
-  })
+  const renewal = renewWithLock(expected, sessionId)
+  const shared = renewal
+    .catch((error) => {
+      // Only the login whose refresh failed may be cleared. A newer login or
+      // token rotation in another tab must survive this older response.
+      clearSession(expected)
+      throw error
+    })
+    .finally(() => {
+      if (pending.get(sessionId) === shared) pending.delete(sessionId)
+    })
   pending.set(sessionId, shared)
   return shared
 }

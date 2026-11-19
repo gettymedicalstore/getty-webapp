@@ -20,6 +20,7 @@ import {
   saveProductResource,
   deleteProductResource,
   type ProductRecord,
+  type ProductReadScope,
 } from "../api/product-management"
 import {
   DeleteProductItem,
@@ -34,9 +35,11 @@ import {
 export default function ProductSpecifications({
   product,
   productName,
+  readScope = "tenant",
 }: {
   product: string
   productName: string
+  readScope?: ProductReadScope
 }) {
   const session = useAuthSession()
   const user = session.data?.user
@@ -56,8 +59,8 @@ export default function ProductSpecifications({
     user?.role === "supplier" ||
     (user?.role === "admin" && ownership.isSuccess && ownership.data === true)
   const query = useQuery({
-    queryKey: ["managed-product", product, "specifications"],
-    queryFn: () => getProductResource(product, "specifications"),
+    queryKey: ["managed-product", product, readScope, "specifications"],
+    queryFn: () => getProductResource(product, "specifications", readScope),
   })
   const mutation = useProductMutation(product)
   const [editor, setEditor] = useState<{ record: ProductRecord | null } | null>(

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { z } from "zod"
 import { toast } from "sonner"
-import { CheckCircle2, MapPin, Package } from "lucide-react"
+import { MapPin, Package, Truck } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { syncSession } from "@/features/auth/api/session-store"
 import { currentSession } from "@/features/auth/api/refresh-session"
@@ -31,6 +31,7 @@ import {
   getOrder,
   actOnOrderLine,
   cancelOrder,
+  canCustomerCancelOrder,
   availableLineActions,
   type ManagedOrder,
   type OrderLine,
@@ -42,6 +43,9 @@ import {
   pendingOrderAction,
 } from "../api/action-recovery"
 import FulfilmentActionDialog from "./fulfilment-action-dialog"
+import ParcelPhoto from "./parcel-photo"
+import RefundProgress from "./refund-progress"
+import { fulfilmentHistoryAction } from "../api/parcel-photo"
 
 const actionLabels: Record<OrderAction | "cancel-order", string> = {
   cancel: "Cancel item",
@@ -68,6 +72,33 @@ const historyLabels: Record<string, string> = {
   "refund-started": "Refund initiated",
   "refund-succeeded": "Refund completed",
 }
+const deliverySteps = [
+  {
+    key: "placed",
+    label: "Order placed",
+    detail: "Order received by Getty",
+  },
+  {
+    key: "preparing",
+    label: "Preparing your order",
+    detail: "Items gathered and prepared",
+  },
+  {
+    key: "ready",
+    label: "Ready for delivery",
+    detail: "Packed for handoff",
+  },
+  {
+    key: "dispatched",
+    label: "On the way",
+    detail: "Travelling to your address",
+  },
+  {
+    key: "delivered",
+    label: "Delivered",
+    detail: "Handed over at your address",
+  },
+] as const
 function formatDeliveryDate(value: string) {
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime())
@@ -208,9 +239,11 @@ export function ActionDialog({
           {selection.line?.name ?? order.reference}.{" "}
           {action === "receive-return"
             ? "Confirm the returned items were received and inspected before choosing whether to restock."
-            : action.includes("cancel")
-              ? "This cancels the entire quantity. Eligible refunds are processed separately."
-              : "Confirm this change to the order."}
+            : action === "cancel-order"
+              ? "Cancel this order before dispatch. If you have paid, any eligible refund is processed separately."
+              : action.includes("cancel")
+                ? "This cancels the entire quantity. Eligible refunds are processed separately."
+                : "Confirm this change to the order."}
         </DialogDescription>
         <ValidatedForm
           schema={schema}
@@ -349,13 +382,7 @@ export default function OrderDetail({
         dateStyle: "medium",
         timeStyle: "short",
       })
-  const cancellable =
-    audience === "customer" &&
-    order.version &&
-    ["pending", "confirmed"].includes(order.status) &&
-    (!order.fulfilment || order.fulfilment === "placed") &&
-    order.items.some((line) => line.status === "pending") &&
-    order.items.every((line) => ["pending", "cancelled"].includes(line.status))
+  const cancellable = audience === "customer" && canCustomerCancelOrder(order)
   const paid = order.payments?.some(
     (payment) => payment.kind === "charge" && payment.status === "succeeded"
   )
@@ -377,6 +404,26 @@ export default function OrderDetail({
                 expired: "Expired",
               }[order.fulfilment]
             : "Stage unavailable"
+  const deliveryStepIndex = deliverySteps.findIndex(
+    (step) => step.key === order.fulfilment
+  )
+  const lastRecordedStep = deliverySteps.reduce((latest, step, index) => {
+    return order.history?.some(
+      (event) => event.action === fulfilmentHistoryAction[step.key]
+    )
+      ? Math.max(latest, index)
+      : latest
+  }, -1)
+  const reachedStepIndex =
+    deliveryStepIndex >= 0 ? deliveryStepIndex : lastRecordedStep
+  const deliveryClosed = ["cancelled", "expired"].includes(order.status)
+  const deliveryWindow = [
+    order.deliveryQuote?.earliest,
+    order.deliveryQuote?.latest,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map(formatDeliveryDate)
+    .join(" – ")
   const itemCount = order.items.reduce((sum, line) => sum + line.quantity, 0)
   const tabs = [
     "items",
@@ -391,7 +438,7 @@ export default function OrderDetail({
           <p className="text-muted-foreground text-xs font-medium">
             Order reference
           </p>
-          <p className="text-sm font-semibold break-all">
+          <p className="text-xl font-semibold tracking-tight break-all">
             {order.orderCode ?? order.reference}
           </p>
           <p className="text-muted-foreground text-xs leading-5">
@@ -400,31 +447,40 @@ export default function OrderDetail({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={order.status} />
-          {order.fulfilment && <StatusBadge status={order.fulfilment} />}
           {audience === "customer" && paid && (
             <StatusBadge status="paid" label="Payment received" />
           )}
         </div>
       </div>
-      {audience === "customer" && (
+      {audience === "customer" && tab !== "delivery" && (
         <section
           aria-label="Current delivery stage"
-          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#dce9df] bg-[#f4faf6] p-4 sm:p-5"
+          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white px-5 py-4 sm:px-6"
         >
-          <div>
-            <p className="text-muted-foreground text-xs font-medium">
-              Current delivery stage
-            </p>
-            <p className="mt-1 text-lg font-semibold text-[#1f5135]">
-              {deliveryStage}
-            </p>
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="bg-primary/10 text-primary grid size-11 shrink-0 place-items-center rounded-full">
+              <Truck className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-muted-foreground text-xs font-medium">
+                Delivery progress
+              </p>
+              <p className="mt-0.5 font-semibold text-[#183f2e]">
+                {deliveryStage}
+              </p>
+              {deliveryWindow && !deliveryClosed && (
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Estimated {deliveryWindow}
+                </p>
+              )}
+            </div>
           </div>
           <Button
             type="button"
             variant="outline"
             onClick={() => setTab("delivery")}
           >
-            View delivery timeline
+            View progress
           </Button>
         </section>
       )}
@@ -625,80 +681,137 @@ export default function OrderDetail({
                 </article>
               ))}
             {tab === "delivery" && (
-              <div className="min-w-0 rounded-xl border bg-white p-5 sm:p-6">
-                <h2 className="font-semibold">Getty delivery</h2>
-                <p className="text-muted-foreground mt-2 text-sm">
-                  This timeline covers your whole order.
-                </p>
-                <ol
-                  className="mt-4 grid gap-2 sm:grid-cols-5"
-                  aria-label="Order delivery timeline"
-                >
-                  {(
-                    [
-                      "placed",
-                      "preparing",
-                      "ready",
-                      "dispatched",
-                      "delivered",
-                    ] as const
-                  ).map((stage, index) => {
-                    const reached =
-                      order.fulfilment &&
-                      [
-                        "placed",
-                        "preparing",
-                        "ready",
-                        "dispatched",
-                        "delivered",
-                      ].indexOf(order.fulfilment) >= index
-                    const event = order.history?.find(
-                      (entry) => entry.action === `fulfilment-${stage}`
-                    )
-                    return (
-                      <li
-                        key={stage}
-                        className={`rounded-lg border px-3 py-2 text-sm capitalize ${reached ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "text-muted-foreground"}`}
-                      >
-                        {stage}
-                        {event && (
-                          <time
-                            dateTime={event.entry}
-                            className="mt-1 block text-xs"
-                          >
-                            {date(event.entry)}
-                          </time>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ol>
-                {order.deliveryQuote &&
-                  (order.deliveryQuote.earliest ||
-                    order.deliveryQuote.latest) && (
-                    <div className="mt-5 rounded-lg bg-[#f4faf6] px-4 py-3 text-sm">
-                      <p className="font-medium text-[#1f5135]">
-                        Estimated delivery
+              <div className="min-w-0 overflow-hidden rounded-xl border bg-white">
+                <div className="border-b px-5 py-5 sm:px-7">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      Delivery progress
+                    </h2>
+                    {reachedStepIndex >= 0 && !deliveryClosed && (
+                      <p className="text-muted-foreground text-sm">
+                        Step {reachedStepIndex + 1} of {deliverySteps.length}
                       </p>
-                      <p className="mt-1">
-                        {[
-                          order.deliveryQuote.earliest,
-                          order.deliveryQuote.latest,
-                        ]
-                          .filter((value): value is string => Boolean(value))
-                          .map(formatDeliveryDate)
-                          .join(" – ")}
-                      </p>
-                      {order.deliveryQuote.estimateOnly && (
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          This delivery window is provisional.
-                        </p>
-                      )}
-                    </div>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Updates for your whole order
+                  </p>
+                  {deliveryClosed && (
+                    <p className="text-muted-foreground mt-2 text-sm">
+                      Delivery stopped when this order {order.status}.
+                    </p>
                   )}
+                </div>
+                <div className="grid gap-8 px-5 py-6 sm:px-7 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10">
+                  <ol className="min-w-0" aria-label="Order delivery timeline">
+                    {deliverySteps.map((step, index) => {
+                      const reached = index <= reachedStepIndex
+                      const current =
+                        index === reachedStepIndex && !deliveryClosed
+                      const event = order.history?.find(
+                        (entry) =>
+                          entry.action === fulfilmentHistoryAction[step.key]
+                      )
+                      const occurredAt = reached
+                        ? (event?.entry ??
+                          (step.key === "placed" ? order.placed : null))
+                        : null
+                      return (
+                        <li
+                          key={step.key}
+                          aria-current={current ? "step" : undefined}
+                          className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4 pb-8 last:pb-0"
+                        >
+                          {index < deliverySteps.length - 1 && (
+                            <span
+                              aria-hidden
+                              className="absolute top-10 bottom-0 left-[1.22rem] w-px bg-[#cbd6ce]"
+                            />
+                          )}
+                          <span
+                            aria-hidden
+                            className={`relative z-10 grid size-10 place-items-center rounded-full text-base font-semibold ${current ? "bg-primary text-white ring-4 ring-[#e5f0e8]" : "border border-[#bdcbc0] bg-white text-[#34473a]"}`}
+                          >
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 pt-1">
+                            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                              <h3
+                                className={`text-base leading-6 font-semibold sm:text-lg ${current ? "text-primary" : "text-[#263a2d]"}`}
+                              >
+                                {step.label}
+                              </h3>
+                              {occurredAt && (
+                                <time
+                                  dateTime={occurredAt}
+                                  className="shrink-0 rounded-full bg-[#f1f6f2] px-2.5 py-1 text-xs text-[#51715b]"
+                                >
+                                  {date(occurredAt)}
+                                </time>
+                              )}
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm leading-6">
+                              {step.detail}
+                            </p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                  <div className="space-y-4">
+                    {audience === "customer" && (
+                      <ParcelPhoto
+                        orderId={order.id}
+                        photo={order.parcelPhoto}
+                      />
+                    )}
+                    {deliveryWindow && !deliveryClosed && (
+                      <div className="rounded-lg bg-[#f3f8f4] p-4">
+                        <p className="text-xs font-semibold tracking-wide text-[#49735b] uppercase">
+                          Estimated arrival
+                        </p>
+                        <p className="mt-2 text-sm font-semibold text-[#183f2e]">
+                          {deliveryWindow}
+                        </p>
+                        {order.deliveryQuote?.estimateOnly && (
+                          <p className="text-muted-foreground mt-2 text-xs leading-5">
+                            This delivery window may change.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {order.delivery && (
+                      <div className="rounded-lg border p-4">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold">
+                          <MapPin className="text-primary size-4" aria-hidden />
+                          Delivering to
+                        </h3>
+                        <address className="mt-3 space-y-1 text-sm leading-6 break-words not-italic">
+                          <p className="font-medium">{order.delivery.name}</p>
+                          <p>{order.delivery.address}</p>
+                          <p>
+                            {[
+                              order.delivery.city,
+                              order.delivery.state,
+                              order.delivery.postcode,
+                              order.delivery.country === "NG"
+                                ? "Nigeria"
+                                : order.delivery.country,
+                            ]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {order.delivery.phone}
+                          </p>
+                        </address>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {order.tracking &&
                   (order.tracking.carrier || order.tracking.reference) && (
-                    <p className="mt-4 text-sm break-words">
+                    <p className="border-t px-5 py-4 text-sm break-words sm:px-7">
                       {order.tracking.carrier
                         ? `Carrier: ${order.tracking.carrier}`
                         : ""}
@@ -708,7 +821,7 @@ export default function OrderDetail({
                     </p>
                   )}
                 {order.fulfilment === "dispatched" && order.version && (
-                  <div className="mt-5 rounded-lg bg-[#f2f8f3] p-4">
+                  <div className="border-t bg-[#f2f8f3] px-5 py-5 sm:px-7">
                     <p className="text-sm">
                       Received the entire remaining order? Confirm receipt only
                       after checking every item. If anything is missing, contact
@@ -722,37 +835,8 @@ export default function OrderDetail({
                     </Button>
                   </div>
                 )}
-                <h2 className="mt-7 mb-5 flex items-center gap-2 font-semibold">
-                  <MapPin className="text-primary size-4" aria-hidden />{" "}
-                  Delivery address
-                </h2>
-                {order.delivery ? (
-                  <address className="space-y-2 text-sm leading-6 break-words not-italic">
-                    <p className="font-semibold">{order.delivery.name}</p>
-                    <p>{order.delivery.address}</p>
-                    <p>
-                      {[
-                        order.delivery.city,
-                        order.delivery.state,
-                        order.delivery.postcode,
-                        order.delivery.country === "NG"
-                          ? "Nigeria"
-                          : order.delivery.country,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
-                    <p className="text-muted-foreground">
-                      Phone: {order.delivery.phone}
-                    </p>
-                  </address>
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    No delivery address returned.
-                  </p>
-                )}
                 {order.notes && (
-                  <div className="mt-5 border-t pt-4">
+                  <div className="border-t px-5 py-5 sm:px-7">
                     <h3 className="text-sm font-medium">Delivery note</h3>
                     <p className="text-muted-foreground mt-2 text-sm leading-6 break-words whitespace-pre-wrap">
                       {order.notes}
@@ -767,52 +851,61 @@ export default function OrderDetail({
                 <p className="text-muted-foreground mt-2 text-sm">
                   Payments and refunds recorded for this order.
                 </p>
-                {!order.payments?.length ? (
+                {!order.payments?.some(
+                  (payment) => payment.kind === "charge"
+                ) ? (
                   <p className="mt-6 text-sm">No payment attempts recorded.</p>
                 ) : (
                   <ul className="mt-5 divide-y">
-                    {order.payments.map((payment) => (
-                      <li
-                        key={payment.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-4"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium">
-                              {payment.kind === "charge" ? "Payment" : "Refund"}
+                    {order.payments
+                      .filter((payment) => payment.kind === "charge")
+                      .map((payment) => (
+                        <li
+                          key={payment.id}
+                          className="flex flex-wrap items-center justify-between gap-3 py-4"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium">
+                                {payment.kind === "charge"
+                                  ? "Payment"
+                                  : "Refund"}
+                              </p>
+                              <StatusBadge
+                                status={payment.status}
+                                label={
+                                  payment.status === "succeeded"
+                                    ? payment.kind === "charge"
+                                      ? "Paid"
+                                      : "Refunded"
+                                    : undefined
+                                }
+                              />
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {payment.settled
+                                ? date(payment.settled)
+                                : ["created", "pending", "unknown"].includes(
+                                      payment.status
+                                    )
+                                  ? "Awaiting confirmation"
+                                  : "Not settled"}
                             </p>
-                            <StatusBadge
-                              status={payment.status}
-                              label={
-                                payment.status === "succeeded"
-                                  ? payment.kind === "charge"
-                                    ? "Paid"
-                                    : "Refunded"
-                                  : undefined
-                              }
-                            />
+                            {payment.method && (
+                              <p className="text-muted-foreground mt-1 text-sm capitalize">
+                                {payment.method}
+                              </p>
+                            )}
                           </div>
-                          <p className="text-muted-foreground mt-1 text-sm">
-                            {payment.settled
-                              ? date(payment.settled)
-                              : ["created", "pending", "unknown"].includes(
-                                    payment.status
-                                  )
-                                ? "Awaiting confirmation"
-                                : "Not settled"}
+                          <p className="font-semibold tabular-nums">
+                            {formatCurrency(payment.amount, payment.currency)}
                           </p>
-                          {payment.method && (
-                            <p className="text-muted-foreground mt-1 text-sm capitalize">
-                              {payment.method}
-                            </p>
-                          )}
-                        </div>
-                        <p className="font-semibold tabular-nums">
-                          {formatCurrency(payment.amount, payment.currency)}
-                        </p>
-                      </li>
-                    ))}
+                        </li>
+                      ))}
                   </ul>
+                )}
+                {audience === "customer" && (
+                  <RefundProgress order={order} onRefresh={refresh} />
                 )}
               </div>
             )}
@@ -880,18 +973,6 @@ export default function OrderDetail({
             commission={order.commission}
             vendor={audience === "vendor"}
           />
-          {audience === "customer" && paid && (
-            <div className="rounded-xl border border-[#dceade] bg-[#f1f8f3] p-5">
-              <p className="flex items-center gap-2 text-sm font-semibold text-[#216342]">
-                <CheckCircle2 className="size-4 shrink-0" aria-hidden /> Payment
-                received
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[#42664f]">
-                Your payment is recorded. Follow the whole-order timeline in the
-                Delivery tab.
-              </p>
-            </div>
-          )}
         </aside>
       </div>
       {selection && (

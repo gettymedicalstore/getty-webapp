@@ -11,6 +11,7 @@ import {
   inventoryFilterSchema,
 } from "@/lib/form-schemas"
 import { useFormContext } from "react-hook-form"
+import { useSearchParams } from "next/navigation"
 
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
 import ContentError from "@/components/shared/content-error"
@@ -43,13 +44,14 @@ import {
 } from "@/lib/api/getty-contract"
 type Selection = { variant: InventoryVariant; kind: "stock" | "threshold" }
 export default function InventoryPageContent() {
+  const params = useSearchParams()
   const dialogReturnFocus = useRef<HTMLButtonElement | null>(null)
   const client = useQueryClient(),
     [tab, setTab] = useState<"variants" | "stocks">("variants"),
     [filter, setFilter] = useState<{
       search: string
       status: "" | "in" | "low" | "out"
-    }>({ search: "", status: "" }),
+    }>({ search: params.get("search")?.slice(0, 200) ?? "", status: "" }),
     [page, setPage] = useState({ cursor: 0, navigation: "next" }),
     [selection, setSelection] = useState<Selection | null>(null),
     [adjustmentType, setAdjustmentType] = useState<
@@ -143,7 +145,11 @@ export default function InventoryPageContent() {
       )
       setSelection(null)
       setRetry(null)
-      await client.invalidateQueries({ queryKey: ["inventory"] })
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["inventory"] }),
+        client.invalidateQueries({ queryKey: ["portal", "products"] }),
+        client.invalidateQueries({ queryKey: ["managed-product"] }),
+      ])
     } catch (e) {
       setError(
         e instanceof Error
@@ -471,7 +477,8 @@ export default function InventoryPageContent() {
                   Reason
                   <FormTextarea
                     name="reason"
-                    className="form-input mt-2 min-h-24"
+                    rows={4}
+                    className="form-input mt-2 field-sizing-fixed min-h-32 resize-y"
                     maxLength={1000}
                     disabled={busy}
                   />

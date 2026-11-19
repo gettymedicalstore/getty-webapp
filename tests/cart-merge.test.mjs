@@ -32,6 +32,7 @@ const { mergeBuyerCart } = require("../features/cart/api/merge-cart.ts")
 const id = "11111111-1111-4111-8111-111111111111",
   other = "22222222-2222-4222-8222-222222222222"
 const storage = new Map()
+const tabStorage = new Map()
 const storageApi = {
   getItem: (key) => storage.get(key) ?? null,
   setItem: (key, value) => storage.set(key, value),
@@ -39,7 +40,11 @@ const storageApi = {
 }
 globalThis.window = {
   localStorage: storageApi,
-  sessionStorage: { getItem: () => null, removeItem: () => {} },
+  sessionStorage: {
+    getItem: (key) => tabStorage.get(key) ?? null,
+    setItem: (key, value) => tabStorage.set(key, value),
+    removeItem: (key) => tabStorage.delete(key),
+  },
   addEventListener() {},
   dispatchEvent() {},
 }
@@ -90,6 +95,7 @@ const guest = (quantity = 2, variantId = id) => ({
 })
 function setup(t, items = [guest()]) {
   storage.clear()
+  tabStorage.clear()
   session.saveSession(
     {
       id: "buyer",
@@ -99,11 +105,12 @@ function setup(t, items = [guest()]) {
     },
     "fixture-token"
   )
-  storage.set(device.DEVICE_CART_KEY, JSON.stringify(items))
+  tabStorage.set(device.DEVICE_CART_KEY, JSON.stringify(items))
   const original = client.apiRequest
   t.after(() => {
     client.apiRequest = original
     storage.clear()
+    tabStorage.clear()
   })
 }
 function mergeResponse(payload, results, view = cart([line(5)])) {
@@ -120,6 +127,32 @@ function mergeResponse(payload, results, view = cart([line(5)])) {
     cart: view,
   })
 }
+test("guest items stay in the tab session and older saved bags migrate once", (t) => {
+  const original = client.apiRequest
+  let calls = 0
+  client.apiRequest = async () => {
+    calls++
+    throw new Error("Guest items must not contact the buyer cart API")
+  }
+  t.after(() => {
+    client.apiRequest = original
+    storage.clear()
+    tabStorage.clear()
+  })
+  session.clearSession()
+  storage.clear()
+  tabStorage.clear()
+  assert.equal(device.saveDeviceItems([guest()]), true)
+  assert.equal(tabStorage.has(device.DEVICE_CART_KEY), true)
+  assert.equal(storage.has(device.DEVICE_CART_KEY), false)
+  assert.equal(device.readDeviceItems()[0].quantity, 2)
+  tabStorage.clear()
+  storage.set(device.DEVICE_CART_KEY, JSON.stringify([guest(4)]))
+  assert.equal(device.readDeviceItems()[0].quantity, 4)
+  assert.equal(storage.has(device.DEVICE_CART_KEY), false)
+  assert.equal(tabStorage.has(device.DEVICE_CART_KEY), true)
+  assert.equal(calls, 0)
+})
 test("guest merge adds once, reads first, sends only IDs and quantities, and keeps authoritative cart metadata", async (t) => {
   setup(t)
   const calls = []
@@ -223,10 +256,10 @@ test("malformed or mismatched merge receipts remain pending instead of discardin
 })
 test("a failed local receipt write retries the original merge token and removes accepted items only once", async (t) => {
   setup(t)
-  const originalSet = storageApi.setItem,
+  const originalSet = window.sessionStorage.setItem,
     bodies = []
   let rejectReceipt = true
-  storageApi.setItem = (key, value) => {
+  window.sessionStorage.setItem = (key, value) => {
     if (
       key === device.DEVICE_CART_KEY &&
       JSON.parse(value).merge?.status === "complete" &&
@@ -236,7 +269,7 @@ test("a failed local receipt write retries the original merge token and removes 
     originalSet(key, value)
   }
   t.after(() => {
-    storageApi.setItem = originalSet
+    window.sessionStorage.setItem = originalSet
   })
   client.apiRequest = async (url, options) => {
     if (options.method !== "POST") return envelope(cart())

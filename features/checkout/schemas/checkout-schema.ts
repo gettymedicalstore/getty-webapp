@@ -20,6 +20,7 @@ export const deliverySchema = z.object({
     .trim()
     .regex(/^[a-zA-Z]{2}$/, "Enter a two-letter country code.")
     .transform((v) => v.toUpperCase()),
+  service: z.string().trim().min(1).max(80).optional(),
   postcode: z
     .string()
     .trim()
@@ -77,6 +78,7 @@ export function deliveryFromCheckoutForm(values: CheckoutFormSchema): Delivery {
     city: values.city,
     state: values.state,
     country,
+    service: values.service,
     postcode: values.postcode,
   })
 }

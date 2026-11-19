@@ -27,6 +27,7 @@ require.extensions[".ts"] = (module, filename) =>
   )
 const dataApi = require("../lib/api/data.ts")
 const api = require("../features/checkout/api/checkout.ts")
+const addresses = require("../features/checkout/api/addresses.ts")
 const recovery = require("../features/checkout/api/recovery.ts")
 const {
   deliverySchema,
@@ -45,6 +46,121 @@ const command = {
   delivery: sample.preview.delivery,
   notes: null,
 }
+
+test("saved addresses use the buyer address-book routes and delivery snapshots", async () => {
+  const original = dataApi.apiData
+  const calls = []
+  const address = {
+    id: token,
+    label: "Home",
+    delivery: sample.preview.delivery,
+    isDefault: true,
+  }
+  dataApi.apiData = async (path, options) => {
+    calls.push({ path, options })
+    return options?.method === "DELETE"
+      ? {}
+      : options?.method === "POST" || options?.method === "PUT"
+        ? address
+        : [address]
+  }
+  try {
+    assert.equal((await addresses.getSavedAddresses())[0].isDefault, true)
+    assert.equal(
+      (
+        await addresses.createAddress({
+          label: "Home",
+          delivery: sample.preview.delivery,
+          isDefault: true,
+        })
+      ).id,
+      token
+    )
+    assert.equal(
+      (
+        await addresses.updateAddress(token, {
+          label: "Office",
+          delivery: sample.preview.delivery,
+        })
+      ).id,
+      token
+    )
+    await addresses.updateAddress(token, {
+      label: "Home",
+      delivery: sample.preview.delivery,
+      isDefault: true,
+    })
+    await addresses.deleteAddress(token)
+    assert.deepEqual(
+      calls.map((call) => [call.options?.method ?? "GET", call.path]),
+      [
+        ["GET", "/getty/v1/order/addresses"],
+        ["POST", "/getty/v1/order/addresses"],
+        ["PUT", `/getty/v1/order/addresses/${token}`],
+        ["PUT", `/getty/v1/order/addresses/${token}`],
+        ["DELETE", `/getty/v1/order/addresses/${token}`],
+      ]
+    )
+    assert.deepEqual(JSON.parse(calls[1].options.body), {
+      label: "Home",
+      delivery: sample.preview.delivery,
+      isDefault: true,
+    })
+    assert.deepEqual(JSON.parse(calls[2].options.body), {
+      label: "Office",
+      delivery: sample.preview.delivery,
+    })
+    assert.deepEqual(JSON.parse(calls[3].options.body), {
+      label: "Home",
+      delivery: sample.preview.delivery,
+      isDefault: true,
+    })
+    assert.equal(
+      addresses.findCreatedAddress([address], [], {
+        label: "Home",
+        delivery: sample.preview.delivery,
+      })?.id,
+      token
+    )
+    assert.equal(
+      addresses.findCreatedAddress([address], [token], {
+        label: "Home",
+        delivery: sample.preview.delivery,
+      }),
+      undefined
+    )
+  } finally {
+    dataApi.apiData = original
+  }
+})
+
+test("a single saved address from GET is available for checkout selection", async () => {
+  const original = dataApi.apiData
+  const address = {
+    id: "01a1e0cb-28e2-718a-8703-1e9cd8da327c",
+    label: "Home",
+    delivery: {
+      city: "Wuse zone 3",
+      name: "Zainab Muhammad",
+      phone: "+2348142445678",
+      state: "FCT",
+      address: "Heritage house",
+      country: "NG",
+      service: "standard",
+      postcode: "900283",
+    },
+    isDefault: true,
+  }
+  dataApi.apiData = async (path) => {
+    assert.equal(path, "/getty/v1/order/addresses")
+    return address
+  }
+  try {
+    assert.deepEqual(await addresses.getSavedAddresses(), [address])
+  } finally {
+    dataApi.apiData = original
+  }
+})
 
 test("delivery validation trims, validates lengths, and sends the preview body without a wrapper", async () => {
   assert.equal(
@@ -173,6 +289,7 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
   assert.ok(api.hostedPaymentLink(sample.checkout, sample.payment, now))
   const testLink =
     "https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/94672f4c16dbdc682e6a"
+  const liveLink = "https://checkout.flutterwave.com/v3/hosted/pay/live-example"
   assert.equal(
     api.hostedPaymentLink(
       sample.checkout,
@@ -180,6 +297,14 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
       now
     ),
     testLink
+  )
+  assert.equal(
+    api.hostedPaymentLink(
+      sample.checkout,
+      { ...sample.payment, link: liveLink },
+      now
+    ),
+    liveLink
   )
   for (const status of [
     "created",
@@ -220,10 +345,6 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
     "javascript:alert(1)",
     "http://example.com",
     "https://user:secret@example.com",
-    "https://checkout.flutterwave.com/v3/hosted/pay/live-example",
-    "https://payment.payaza.africa/pay/example",
-    "https://checkout.paystack.com/example",
-    "https://checkout.paystack.com/old-payment-link",
     "https://checkout.flutterwave.com.evil.example/payment",
     "https://checkout-v2.dev-flutterwave.com.evil.example/v3/hosted/pay/example",
     "https://checkout-v2.dev-flutterwave.com/other-path",
@@ -246,6 +367,30 @@ test("only pending charges on unexpired pending orders can reopen a secure hoste
       ),
       null
     )
+  assert.equal(
+    api.hostedPaymentLink(
+      sample.checkout,
+      {
+        ...sample.payment,
+        provider: "payaza",
+        link: "https://payment.payaza.africa/pay/example",
+      },
+      now
+    ),
+    "https://payment.payaza.africa/pay/example"
+  )
+  assert.equal(
+    api.hostedPaymentLink(
+      sample.checkout,
+      {
+        ...sample.payment,
+        provider: "paystack",
+        link: "https://checkout.paystack.com/example",
+      },
+      now
+    ),
+    "https://checkout.paystack.com/example"
+  )
   assert.equal(
     api.hostedPaymentLink(
       sample.checkout,

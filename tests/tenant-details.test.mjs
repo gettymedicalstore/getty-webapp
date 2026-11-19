@@ -79,7 +79,7 @@ function render(kind, tab, data = fixture) {
   return html
 }
 
-test("customer and vendor pages link to persistent tabs and their own lists", () => {
+test("customer and vendor pages link to their own sections", () => {
   for (const kind of ["customers", "vendors"]) {
     const html = render(kind, "overview")
     assert.ok(html.includes("Example Healthcare"))
@@ -87,10 +87,34 @@ test("customer and vendor pages link to persistent tabs and their own lists", ()
     for (const tab of ["overview", "contact", "business", "account"]) {
       assert.ok(html.includes(`href="/admin/${kind}/customer-id?tab=${tab}"`))
     }
-    assert.ok(html.includes(`href="/admin/${kind}"`))
-    assert.ok(html.includes(`Back to ${kind}`))
+    if (kind === "vendors") {
+      assert.ok(html.includes('href="/admin/vendors/customer-id?tab=products"'))
+      assert.equal(html.includes("Back to vendors"), false)
+      assert.equal(html.includes("Refresh"), false)
+    } else {
+      assert.ok(html.includes('href="/admin/customers"'))
+      assert.ok(html.includes("Back to customers"))
+      assert.ok(html.includes("Refresh"))
+    }
     assert.equal(html.includes('role="dialog"'), false)
   }
+})
+
+test("vendor products tab is scoped to the vendor and is absent for customers", () => {
+  const vendor = render("vendors", "products", {
+    ...fixture,
+    id: "vendor-id",
+    name: "Gaarrri Stores",
+  })
+  assert.ok(vendor.includes("Vendor products"))
+  assert.ok(vendor.includes("Browse products listed by Gaarrri Stores."))
+  assert.ok(vendor.includes("Search vendor products"))
+  assert.equal(vendor.includes("Filter by vendor"), false)
+  assert.equal(vendor.includes("Back to vendors"), false)
+  assert.equal(
+    render("customers", "products").includes("Vendor products"),
+    false
+  )
 })
 
 test("contact and business tabs render nested data without object stringification", () => {

@@ -18,6 +18,7 @@ import { DashboardSkeleton } from "@/components/shared/loading-skeletons"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { portalTenant } from "../api/portal"
+import AllProductsPage from "./all-products-page"
 import {
   isAccountDetailField,
   tenantDetailGroups,
@@ -132,8 +133,16 @@ export default function TenantWorkspace({
 }) {
   const pathname = usePathname()
   const params = useSearchParams()
+  const tabs =
+    kind === "vendors"
+      ? [
+          tenantTabs[0],
+          { id: "products", label: "Products" } as const,
+          ...tenantTabs.slice(1),
+        ]
+      : tenantTabs
   const active =
-    tenantTabs.find((tab) => tab.id === params.get("tab")) ?? tenantTabs[0]
+    tabs.find((tab) => tab.id === params.get("tab")) ?? tenantTabs[0]
   const query = useQuery({
     queryKey: ["managed-tenant", tenantId],
     queryFn: () => portalTenant(tenantId),
@@ -162,7 +171,6 @@ export default function TenantWorkspace({
       </div>
     )
   const data: TenantRecord = query.data
-  const name = tenantText(data, "name") || `${label} details`
   const status = tenantText(data, "status")
   const groups = tenantDetailGroups(data)
   const verified = data.verified === true || data.isVerified === true
@@ -184,9 +192,6 @@ export default function TenantWorkspace({
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight break-words text-[#172f23] sm:text-3xl">
-                {name}
-              </h1>
               {verified && (
                 <BadgeCheck
                   role="img"
@@ -212,24 +217,26 @@ export default function TenantWorkspace({
             <p className="mt-2 text-sm text-[#5e6f63]">{label} account</p>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          <RotateCcw
-            aria-hidden
-            className={cn("size-4", query.isFetching && "animate-spin")}
-          />
-          Refresh
-        </Button>
+        {kind === "customers" && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RotateCcw
+              aria-hidden
+              className={cn("size-4", query.isFetching && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        )}
       </div>
       <nav
         aria-label={`${label} sections`}
         className="flex [scrollbar-width:thin] gap-1 overflow-x-auto border-b border-[#dce5df] sm:gap-3"
       >
-        {tenantTabs.map((tab) => (
+        {tabs.map((tab) => (
           <Link
             key={tab.id}
             href={tabHref(tab.id)}
@@ -289,6 +296,11 @@ export default function TenantWorkspace({
               ]}
             />
           </div>
+        ) : active.id === "products" ? (
+          <AllProductsPage
+            vendorId={tenantId}
+            vendorName={tenantText(data, "name")}
+          />
         ) : (
           <TenantInformation
             title={active.label}
@@ -303,7 +315,7 @@ export default function TenantWorkspace({
           />
         )}
       </div>
-      {back}
+      {kind === "customers" && back}
     </div>
   )
 }

@@ -40,6 +40,10 @@ const HeroCarousel =
   require("../components/store/home/hero-carousel.tsx").default
 const ProductPrice =
   require("../features/products/components/store/product-price.tsx").default
+const FeaturedForm =
+  require("../features/featured/components/featured-form.tsx").default
+const FeaturedImage =
+  require("../features/featured/components/featured-image.tsx").default
 const {
   productPricing,
 } = require("../features/products/utils/product-pricing.ts")
@@ -152,7 +156,7 @@ test("store cards render uploaded thumbnails and retain the placeholder for empt
   client.clear()
 })
 
-function render(client, published = true) {
+function render(client) {
   return renderToStaticMarkup(
     React.createElement(
       QueryClientProvider,
@@ -160,7 +164,6 @@ function render(client, published = true) {
       React.createElement(ProductImageUpload, {
         product,
         photosLink,
-        published,
       })
     )
   )
@@ -188,16 +191,125 @@ test("the Photos tab renders images loaded from the backend without a prior loca
   client.clear()
 })
 
-test("published photo loading stays distinct from an empty selection while drafts can still upload", () => {
+test("featured editor offers existing product photos and previews the selected one", () => {
+  const client = new QueryClient()
+  const url = `https://api.gettymedicalstores.com${photosLink}/${file}/src`
+  client.setQueryData(
+    ["featured", "vendor-options"],
+    [{ id: product, name: "Getty" }]
+  )
+  client.setQueryData(
+    ["featured", "product-options", product],
+    [{ id: product, name: "Test product" }]
+  )
+  client.setQueryData(["featured", "product-photos", product], {
+    pages: [
+      {
+        records: [{ id: file, name: "front.webp", mime: "image/webp", url }],
+        nextCursor: null,
+        limit: 24,
+      },
+    ],
+    pageParams: [null],
+  })
+  const html = renderToStaticMarkup(
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(FeaturedForm, {
+        entry: {
+          id: file,
+          tenant: product,
+          product,
+          photo: file,
+          caption: "Everyday care",
+          starts: "2099-10-15T09:00:00+01:00",
+          ends: "2099-10-22T23:59:00+01:00",
+          ordinal: 0,
+          productName: "Test product",
+          vendorName: "Getty",
+        },
+        layout: "page",
+        busy: false,
+        error: "",
+        onSave: async () => {},
+        onCancel: () => {},
+        onUploadBusy: () => {},
+      })
+    )
+  )
+  assert.ok(html.includes('aria-label="Use product photo 1: front.webp"'))
+  assert.ok(html.includes('aria-pressed="true"'))
+  assert.ok(html.includes(`src="${url}"`))
+  assert.ok(html.includes("Upload a different image"))
+  client.clear()
+})
+
+test("failed featured storage images fall back to the product photo", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const advert = "01a11611-c433-7000-8000-100000056e27"
+  const url = `https://api.gettymedicalstores.com${photosLink}/${file}/src`
+  await client.prefetchQuery({
+    queryKey: ["featured", "image", advert],
+    queryFn: async () => {
+      throw new Error("Storage rejected the signed link")
+    },
+  })
+  client.setQueryData(["featured", "catalog-photos", product], {
+    records: [{ id: file, name: "front.webp", mime: "image/webp", url }],
+    nextCursor: null,
+    limit: 24,
+  })
+  const html = renderToStaticMarkup(
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(FeaturedImage, {
+        id: advert,
+        product,
+        name: "Test product",
+      })
+    )
+  )
+  assert.ok(html.includes(`src="${url}"`))
+  assert.ok(html.includes('alt="Test product"'))
+  client.clear()
+})
+
+test("featured entries reusing a product photo render its catalog source", () => {
+  const client = new QueryClient()
+  const advert = "01a11611-c433-7000-8000-100000056e27"
+  const url = `https://api.gettymedicalstores.com${photosLink}/${file}/src`
+  client.setQueryData(["featured", "catalog-photos", product], {
+    records: [{ id: file, name: "front.webp", mime: "image/webp", url }],
+    nextCursor: null,
+    limit: 24,
+  })
+  const html = renderToStaticMarkup(
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(FeaturedImage, {
+        id: advert,
+        product,
+        photo: file,
+        name: "Test product",
+      })
+    )
+  )
+  assert.ok(html.includes(`src="${url}"`))
+  client.clear()
+})
+
+test("saved photos load for products awaiting review while uploads remain available", () => {
   const client = new QueryClient()
   const loading = render(client)
   assert.ok(loading.includes('aria-label="Loading product photos"'))
   assert.equal(loading.includes("Add product photos"), false)
-  const draft = render(client, false)
-  assert.ok(draft.includes("No photos yet"))
-  assert.ok(draft.includes("Upload single image"))
-  assert.ok(draft.includes("Upload multiple images"))
-  assert.equal(draft.match(/Upload single image/g)?.length, 1)
-  assert.equal(draft.includes('aria-label="Loading product photos"'), false)
+  assert.ok(loading.includes("Upload single image"))
+  assert.ok(loading.includes("Upload multiple images"))
+  assert.equal(loading.includes("No photos yet"), false)
   client.clear()
 })

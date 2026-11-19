@@ -20,7 +20,12 @@ export default async function SupplierSection({
   if (section === "account") return <AccountPage />
   if (section === "taxes") return <TaxesPage />
   if (section === "settings") return <Settings />
-  if (section === "inventory") return <InventoryPage />
+  if (section === "inventory")
+    return (
+      <Suspense fallback={<TableSkeleton />}>
+        <InventoryPage />
+      </Suspense>
+    )
   if (section === "profile") return <ProfileForm />
   if (!["products", "orders", "payments", "inventory"].includes(section))
     notFound()

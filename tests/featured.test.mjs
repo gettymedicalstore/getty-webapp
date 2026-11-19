@@ -30,6 +30,7 @@ const api = require("../features/featured/api/featured.ts")
 const data = require("../lib/api/data.ts")
 const client = require("../lib/api/client.ts")
 const photos = require("../features/admin/api/product-photos.ts")
+const productPhotoCopy = require("../features/featured/api/product-photo-copy.ts")
 const entry = {
   id: "advert-1",
   product: { id: "product-1", name: "Gloves" },
@@ -109,6 +110,51 @@ test("featured responses preserve IDs, cursor history tokens and nested names", 
     )
   )
   assert.throws(() => schema.parseFeaturedEntry({ id: "advert" }))
+})
+test("new featured products use the position after every current scheduled or active entry", async () => {
+  const original = data.apiData
+  const calls = []
+  data.apiData = async (path) => {
+    calls.push(path)
+    return calls.length === 1
+      ? {
+          records: [
+            {
+              ...entry,
+              ordinal: 0,
+              starts: "2099-01-01T00:00:00+01:00",
+              ends: "2099-12-31T00:00:00+01:00",
+            },
+            { ...entry, ordinal: 9, ends: "2020-01-01T00:00:00+01:00" },
+          ],
+          isNext: true,
+          nextCursor: 42,
+        }
+      : {
+          records: [
+            {
+              ...entry,
+              ordinal: 3,
+              starts: "2099-01-01T00:00:00+01:00",
+              ends: "2099-12-31T00:00:00+01:00",
+            },
+          ],
+          isNext: false,
+          nextCursor: null,
+        }
+  }
+  try {
+    assert.deepEqual(await api.getNextFeaturedOrdinal(), {
+      next: 4,
+      occupied: [0, 3],
+    })
+    assert.deepEqual(calls, [
+      "/getty/v1/featured?cursor=0&limit=20",
+      "/getty/v1/featured?cursor=42&limit=20",
+    ])
+  } finally {
+    data.apiData = original
+  }
 })
 test("scheduling uses Lagos time, exact boundaries and closed overrides", () => {
   const row = schema.parseFeaturedEntry(entry)
@@ -226,5 +272,46 @@ test("dedicated advert upload sends raw bytes to signed storage without attachin
     assert.equal(calls[0][1].headers.Authorization, undefined)
   } finally {
     globalThis.fetch = original
+  }
+})
+test("selecting a catalogue image copies it into a featured attachment before saving", async () => {
+  const originalFetch = globalThis.fetch
+  const originalPrepare = photos.prepareProductImageUpload
+  const originalUpload = photos.uploadImageFile
+  const calls = []
+  const imageUrl =
+    "https://api.gettymedicalstores.com/getty/ecommerce/catalog/products/product-1/photos/photo-1/src"
+  globalThis.fetch = async (...args) => {
+    calls.push(args)
+    return new Response(new Blob(["imagebytes"], { type: "image/webp" }), {
+      headers: { "content-type": "image/webp" },
+    })
+  }
+  photos.prepareProductImageUpload = async (file) => {
+    calls.push(["prepare", file])
+    return { id: "featured-file-1" }
+  }
+  photos.uploadImageFile = async (file, target) => {
+    calls.push(["upload", file, target])
+    return target.id
+  }
+  try {
+    const result = await productPhotoCopy.copyProductPhotoForFeatured({
+      id: "photo-1",
+      product: "product-1",
+      name: "front.webp",
+      mime: "image/webp",
+      url: imageUrl,
+    })
+    assert.equal(result, "featured-file-1")
+    assert.equal(calls[0][0], imageUrl)
+    assert.deepEqual(calls[0][1], { credentials: "omit" })
+    assert.equal(calls[1][1].name, "front.webp")
+    assert.equal(calls[1][1].type, "image/webp")
+    assert.equal(calls[2][2].id, "featured-file-1")
+  } finally {
+    globalThis.fetch = originalFetch
+    photos.prepareProductImageUpload = originalPrepare
+    photos.uploadImageFile = originalUpload
   }
 })

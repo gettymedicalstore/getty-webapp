@@ -47,8 +47,8 @@ try {
     await fixtures(context, "customer")
     await context.addInitScript(
       (items) => {
-        if (!localStorage.getItem("getty-device-cart-v1"))
-          localStorage.setItem("getty-device-cart-v1", JSON.stringify(items))
+        if (!sessionStorage.getItem("getty-device-cart-v1"))
+          sessionStorage.setItem("getty-device-cart-v1", JSON.stringify(items))
       },
       partial
         ? [

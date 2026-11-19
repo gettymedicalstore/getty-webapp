@@ -12,6 +12,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import PriceInput from "@/components/shared/form/price-input"
 import { portalRecords } from "../api/portal"
 import {
   saveProductOverview,
@@ -136,13 +137,10 @@ export default function ProductOverview({
               />
             </label>
             <div className="grid gap-5 sm:grid-cols-2">
-              <FormInputField
-                name="price"
+              <PriceInput
+                id="default-product-price"
                 label={`Default price (${currency})`}
-                required
-                type="number"
-                min={0}
-                step="any"
+                currency={currency}
                 defaultValue={valueText(variant?.price)}
               />
               <FormInputField
@@ -199,7 +197,6 @@ export default function ProductOverview({
             ["Default price", money(variant?.price, currency)],
             ["Available stock", valueText(variant?.availableQuantity, "—")],
             ["Variants", String(data.variants.length)],
-            ["Default SKU", valueText(variant?.sku, "—")],
           ].map(([label, value]) => (
             <div key={label}>
               <dt className="text-xs text-[#5e6f63]">{label}</dt>

@@ -8,6 +8,7 @@ import {
   parseFeaturedOption,
   parseFeaturedPage,
   lagosTimestamp,
+  featuredStatus,
   type Cursor,
   type FeaturedStatus,
   type FeaturedFormValues,
@@ -41,6 +42,29 @@ export async function getFeaturedPage({
 }
 export async function getFeaturedEntry(id: string) {
   return parseFeaturedEntry(await apiData(`${root}/${encodeURIComponent(id)}`))
+}
+export async function getNextFeaturedOrdinal() {
+  const positions = new Set<number>()
+  const visited = new Set<Cursor>()
+  let cursor: Cursor = 0
+  for (;;) {
+    if (visited.has(cursor))
+      throw new GettyApiError("The featured list repeated a page cursor.", 502)
+    visited.add(cursor)
+    const page = await getFeaturedPage({ cursor })
+    for (const entry of page.records) {
+      const status = featuredStatus(entry)
+      if (status !== "expired" && status !== "closed")
+        positions.add(entry.ordinal)
+    }
+    if (!page.isNext) break
+    cursor = page.nextCursor!
+  }
+  const occupied = [...positions].sort((a, b) => a - b)
+  return {
+    next: occupied.length ? occupied[occupied.length - 1] + 1 : 0,
+    occupied,
+  }
 }
 export async function getFeaturedOptions(
   kind: "vendors" | "products",

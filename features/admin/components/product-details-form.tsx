@@ -6,6 +6,7 @@ import {
   FormTextarea,
 } from "@/components/shared/form/validated-form"
 import { productDetailsFormSchema } from "@/lib/form-schemas"
+import { signupCountries } from "@/lib/signup-phone"
 import type { z } from "zod"
 import type { ReactNode } from "react"
 
@@ -15,6 +16,7 @@ import { TableSkeleton } from "@/components/shared/loading-skeletons"
 import {
   getProductResource,
   saveProductResource,
+  type ProductReadScope,
 } from "../api/product-management"
 import {
   FormActions,
@@ -31,12 +33,10 @@ const shortFields = [
     placeholder: "Manufacturer name",
   },
   { key: "model", label: "Model", placeholder: "Model name or number" },
-  {
-    key: "origin",
-    label: "Country of origin",
-    placeholder: "Country where it was made",
-  },
 ]
+const originCountries = [...signupCountries].sort((a, b) =>
+  a.name.localeCompare(b.name)
+)
 const longFields = [
   {
     key: "usage",
@@ -65,10 +65,16 @@ const numberFields = [
   { key: "dispatch", label: "Dispatch time" },
 ]
 
-export default function ProductDetailsForm({ product }: { product: string }) {
+export default function ProductDetailsForm({
+  product,
+  readScope = "tenant",
+}: {
+  product: string
+  readScope?: ProductReadScope
+}) {
   const query = useQuery({
-    queryKey: ["managed-product", product, "detail"],
-    queryFn: () => getProductResource(product, "detail"),
+    queryKey: ["managed-product", product, readScope, "detail"],
+    queryFn: () => getProductResource(product, "detail", readScope),
   })
   const mutation = useProductMutation(product)
   if (query.isPending) return <TableSkeleton />
@@ -81,10 +87,22 @@ export default function ProductDetailsForm({ product }: { product: string }) {
       />
     )
   const data = query.data
+  const savedOrigin = valueText(data?.origin).trim()
+  const selectedOrigin =
+    originCountries.find(
+      (country) =>
+        country.code === savedOrigin.toUpperCase() ||
+        country.name.toLowerCase() === savedOrigin.toLowerCase()
+    )?.code ??
+    (/^[A-Za-z]{2}$/.test(savedOrigin) ? savedOrigin.toUpperCase() : "")
+  const knownOrigin = originCountries.some(
+    (country) => country.code === selectedOrigin
+  )
   async function submit(values: z.output<typeof productDetailsFormSchema>) {
     const fields: Record<string, unknown> = { ...values }
     for (const field of [...shortFields, ...longFields])
       fields[field.key] = values[field.key as keyof typeof values] || null
+    fields.origin = values.origin || null
     for (const field of booleanFields)
       fields[field.key] =
         values[field.key as keyof typeof values] === ""
@@ -127,6 +145,24 @@ export default function ProductDetailsForm({ product }: { product: string }) {
                   containerClassName="min-w-0"
                 />
               ))}
+              <label className="block min-w-0 space-y-2 text-sm font-medium text-[#414651]">
+                <span>Country of origin</span>
+                <FormSelect
+                  name="origin"
+                  defaultValue={selectedOrigin}
+                  className="h-13 w-full rounded-lg border border-[#dce2de] bg-white px-3.5 text-base font-normal text-[#34453a] transition-[border-color,box-shadow] outline-none hover:border-[#bac7be] focus-visible:border-[#1b5944] focus-visible:ring-3 focus-visible:ring-[#1b5944]/10 disabled:opacity-50 aria-invalid:border-red-500 sm:text-sm"
+                >
+                  <option value="">Select a country</option>
+                  {selectedOrigin && !knownOrigin && (
+                    <option value={selectedOrigin}>{selectedOrigin}</option>
+                  )}
+                  {originCountries.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              </label>
             </div>
           </DetailsSection>
           <DetailsSection

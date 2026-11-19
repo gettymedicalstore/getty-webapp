@@ -22,25 +22,36 @@ export default function ProductCardImage({
 }) {
   const remote = product.source === "remote"
   const hasImage = Boolean(product.image && product.image !== placeholder)
+  const [failedSources, setFailedSources] = useState<Set<string>>(
+    () => new Set()
+  )
   const thumbnail = useQuery({
     queryKey: ["products", "thumbnail", product.id],
     queryFn: () => getProductThumbnail(product.id),
-    enabled: remote && !hasImage,
+    enabled: remote && (!hasImage || failedSources.has(product.image)),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })
-  const [failedSource, setFailedSource] = useState<string | null>(null)
-  const source = (hasImage ? product.image : thumbnail.data) || placeholder
+  const primary = hasImage ? product.image : thumbnail.data
+  const source =
+    (primary && !failedSources.has(primary) ? primary : "") ||
+    (thumbnail.data && !failedSources.has(thumbnail.data)
+      ? thumbnail.data
+      : "") ||
+    placeholder
 
   return (
     <Image
-      src={failedSource === source ? placeholder : source}
+      src={source}
       unoptimized={remote}
       alt={product.name}
       fill
       sizes={sizes}
       loading={eager ? "eager" : "lazy"}
-      onError={() => setFailedSource(source)}
+      onError={() => {
+        if (source !== placeholder)
+          setFailedSources((current) => new Set(current).add(source))
+      }}
       className={cn(
         "object-contain p-4 transition-transform duration-500 group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none sm:p-6",
         className

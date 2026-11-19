@@ -65,8 +65,13 @@ export default function PortalShell({
   const fulfilmentDetail =
     adminOrderDetail && path.startsWith("/admin/fulfilment/")
   const productQuery = useQuery({
-    queryKey: ["managed-product", productId],
-    queryFn: () => getManagedProduct(productId),
+    queryKey: [
+      "managed-product",
+      productId,
+      role === "admin" ? "admin" : "tenant",
+    ],
+    queryFn: () =>
+      getManagedProduct(productId, role === "admin" ? "admin" : "tenant"),
     enabled: productDetail,
   })
   const tenantRoute =
@@ -181,9 +186,9 @@ export default function PortalShell({
             <Menu aria-hidden className="size-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base leading-6 font-semibold text-[#243c2e] sm:text-lg">
+            <h1 className="truncate text-base leading-6 font-semibold text-[#243c2e] sm:text-lg">
               {title}
-            </p>
+            </h1>
             <nav aria-label="Breadcrumb" className="mt-0.5 min-w-0">
               <ol className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-[#5e6f63] sm:gap-2">
                 <li className="shrink-0">

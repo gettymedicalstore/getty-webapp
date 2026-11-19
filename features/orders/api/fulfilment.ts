@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { apiData } from "@/lib/api/data"
+import { GettyApiError } from "@/lib/api/client"
 import {
   fulfilmentStatuses,
   orderDetailSchema,
@@ -42,6 +43,13 @@ export const operationsItemSchema = z.object({
 })
 export const operationsOrderSchema = z.object({
   id,
+  parcelPhoto: z
+    .object({
+      fileId: z.string().min(1),
+      stage: z.string(),
+      accessPath: z.string().min(1),
+    })
+    .nullish(),
   orderCode: z.string().optional(),
   reference: z.string().optional(),
   status: z.enum(orderStatuses).optional(),
@@ -165,8 +173,20 @@ export const fulfilmentActionSchema = z
     tracking: z.string().trim().max(200).optional(),
     recipient: z.string().trim().max(120).optional(),
     proof: z.string().trim().max(500).optional(),
+    parcelPhotoFileId: z.uuid().optional(),
   })
   .superRefine((value, ctx) => {
+    if (
+      value.parcelPhotoFileId &&
+      value.action !== "ready" &&
+      value.action !== "dispatch"
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["parcelPhotoFileId"],
+        message:
+          "A parcel photo can only be attached when ready or dispatching.",
+      })
     if (value.action === "dispatch") {
       if (!value.carrier)
         ctx.addIssue({
@@ -218,18 +238,8 @@ export function canAdvanceFulfilment(
   const active = order.items.filter(
     (item) => item.supply.status !== "cancelled" && item.status !== "cancelled"
   )
-  if (
-    order.fulfilment === "preparing" &&
-    active.length > 0 &&
-    active.every((item) => item.supply.status === "received")
-  )
-    return "ready"
-  if (
-    order.fulfilment === "ready" &&
-    active.length > 0 &&
-    active.every((item) => item.supply.status === "received")
-  )
-    return "dispatch"
+  if (active.length > 0 && order.fulfilment === "preparing") return "ready"
+  if (active.length > 0 && order.fulfilment === "ready") return "dispatch"
   if (order.fulfilment === "dispatched") return "deliver"
   return null
 }
@@ -281,7 +291,8 @@ export async function postFulfilmentAction(
       body.carrier ||
       body.tracking ||
       body.recipient ||
-      body.proof)
+      body.proof ||
+      body.parcelPhotoFileId)
   )
     throw new Error("Customers may only confirm receipt of their entire order.")
   if (
@@ -297,6 +308,27 @@ export async function postFulfilmentAction(
   return audience === "customer"
     ? orderDetailSchema.parse(result)
     : operationsOrderSchema.parse(result)
+}
+
+export async function postOperationsActionWithPhotoRetry(
+  input: z.input<typeof fulfilmentActionSchema>,
+  beforeRetry: () => void
+): Promise<OperationsOrder> {
+  try {
+    return await postFulfilmentAction(input, "operations")
+  } catch (cause) {
+    if (
+      !input.parcelPhotoFileId ||
+      !(cause instanceof GettyApiError) ||
+      cause.status !== 404 ||
+      !/parcel photo was not found/i.test(cause.message)
+    )
+      throw cause
+    // Preserve the action token if the attachment has not reached the order service.
+    await new Promise<void>((resolve) => setTimeout(resolve, 750))
+    beforeRetry()
+    return postFulfilmentAction(input, "operations")
+  }
 }
 
 export async function postSupplyAction(

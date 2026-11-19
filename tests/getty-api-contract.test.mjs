@@ -405,7 +405,7 @@ test("post-login navigation stays in the correct workspace and preserves custome
     "/products/sterile-gloves"
   )
 })
-test("authenticated calls require a session and rejected cookie renewal does not erase it", async (t) => {
+test("authenticated calls require a session and rejected renewal signs out", async (t) => {
   let calls = 0
   mock(t, (url, options) => {
     calls++
@@ -426,7 +426,7 @@ test("authenticated calls require a session and rejected cookie renewal does not
     (e) => e.status === 401
   )
   assert.equal(calls, 2)
-  assert.equal(session.readSession().user.id, fixtureUser.id)
+  assert.equal(session.readSession().user, null)
 })
 test("password change submits only current and new passwords without verification", async (t) => {
   const calls = []
@@ -1312,7 +1312,7 @@ test("a late 401 reuses the already rotated token instead of refreshing again", 
   assert.equal(refreshes, 1)
 })
 
-test("rejected refresh credentials preserve the login and request reauthentication", async (t) => {
+test("rejected refresh credentials sign out the expired login", async (t) => {
   let calls = 0
   mock(t, () => {
     calls++
@@ -1325,12 +1325,42 @@ test("rejected refresh credentials preserve the login and request reauthenticati
       error.status === 401 && error.message.includes("renew your session")
   )
   assert.equal(calls, 2)
-  assert.equal(session.readSession().user.id, fixtureUser.id)
-  assert.equal(session.readSession().refreshToken, "fixture-refresh")
-  assert.equal(session.readSession().refreshRejected, true)
+  assert.equal(session.readSession().user, null)
+  assert.equal(session.readSession().refreshToken, null)
+  assert.equal(session.readSession().refreshRejected, false)
 })
 
-test("failed or incomplete renewal preserves the session and a later attempt can recover", async (t) => {
+test("a saved rejection marker cannot skip refresh after a cart 401", async (t) => {
+  let refreshes = 0
+  let cartRequests = 0
+  mock(t, (url, options) => {
+    if (url.pathname === refreshPath) {
+      refreshes++
+      assert.equal(options.method, "POST")
+      return renewedResponse()
+    }
+    assert.equal(url.pathname, "/getty/v1/order/cart")
+    cartRequests++
+    if (options.headers.get("Authorization") === "Bearer fixture-expired")
+      return expiredResponse()
+    assert.equal(options.headers.get("Authorization"), "Bearer fixture-renewed")
+    return Response.json(envelope(cart))
+  })
+  session.saveSession(fixtureUser, tokenPair)
+  const record = JSON.parse(storage.get(session.SESSION_STORAGE_KEY))
+  storage.set(
+    session.SESSION_STORAGE_KEY,
+    JSON.stringify({ ...record, refreshRejected: true })
+  )
+  storageEvent()
+
+  await liveCart()
+  assert.equal(refreshes, 1)
+  assert.equal(cartRequests, 2)
+  assert.equal(session.readSession().refreshRejected, false)
+})
+
+test("failed or incomplete renewal signs out and a new login can recover", async (t) => {
   let mode = "offline",
     refreshes = 0
   mock(t, (url, options) => {
@@ -1356,14 +1386,16 @@ test("failed or incomplete renewal preserves the session and a later attempt can
     ["invalid-body", 400],
   ]) {
     mode = failure
+    session.saveSession(fixtureUser, tokenPair)
     await assert.rejects(
       apiRequest("/getty/v1/order/cart"),
       (error) => error.status === status
     )
-    assert.equal(session.readSession().user.id, fixtureUser.id)
-    assert.equal(session.readSession().refreshToken, "fixture-refresh")
+    assert.equal(session.readSession().user, null)
+    assert.equal(session.readSession().refreshToken, null)
   }
   mode = "success"
+  session.saveSession(fixtureUser, tokenPair)
   await apiRequest("/getty/v1/order/cart")
   assert.equal(refreshes, 5)
   assert.equal(session.accessToken(), "fixture-renewed")
@@ -1492,12 +1524,13 @@ test("a token rotated by another tab while waiting for the Web Lock is reused", 
     configurable: true,
     value: {
       locks: {
-        request: async (name, callback) => {
+        request: async (name, options, callback) => {
           lockCalls++
           assert.equal(
             name,
-            "getty-session-refresh:https://api.gettymedicalstores.com"
+            `getty-session-refresh:https://api.gettymedicalstores.com:${session.readSession().sessionId}`
           )
+          assert.equal(options.signal instanceof AbortSignal, true)
           const record = JSON.parse(storage.get(session.SESSION_STORAGE_KEY))
           storage.set(
             session.SESSION_STORAGE_KEY,
@@ -1528,6 +1561,43 @@ test("a token rotated by another tab while waiting for the Web Lock is reused", 
   assert.equal(refreshes, 0)
 })
 
+test("a blocked Web Lock cannot prevent cart 401 renewal", async (t) => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator")
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      locks: {
+        request: (_name, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener(
+              "abort",
+              () => reject(options.signal.reason),
+              { once: true }
+            )
+          }),
+      },
+    },
+  })
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, "navigator", original)
+    else delete globalThis.navigator
+  })
+  let refreshes = 0
+  mock(t, (url, options) => {
+    if (url.pathname === refreshPath) {
+      refreshes++
+      return renewedResponse()
+    }
+    return options.headers.get("Authorization") === "Bearer fixture-expired"
+      ? expiredResponse()
+      : Response.json(envelope(cart))
+  })
+  session.saveSession(fixtureUser, tokenPair)
+  await liveCart()
+  assert.equal(refreshes, 1)
+  assert.equal(session.accessToken(), "fixture-renewed")
+})
+
 test("renewal can return only an access token and preserves the existing refresh credentials", async (t) => {
   mock(t, (url, options) => {
     if (url.pathname === refreshPath)
@@ -1543,7 +1613,7 @@ test("renewal can return only an access token and preserves the existing refresh
   assert.equal(session.readSession().fingerprint, "fixture-fingerprint")
 })
 
-test("a forbidden refresh response preserves the account without any retry loop", async (t) => {
+test("a forbidden refresh response signs out without any retry loop", async (t) => {
   let calls = 0
   mock(t, (url) => {
     calls++
@@ -1556,8 +1626,8 @@ test("a forbidden refresh response preserves the account without any retry loop"
     apiRequest("/getty/v1/order/cart"),
     (error) => error.status === 401
   )
-  assert.equal(session.readSession().user.id, fixtureUser.id)
-  assert.equal(session.readSession().refreshRejected, true)
+  assert.equal(session.readSession().user, null)
+  assert.equal(session.readSession().refreshRejected, false)
   assert.equal(calls, 2)
 })
 
@@ -2027,6 +2097,34 @@ test("product workspace reads the aggregate record and refuses a mismatched prod
     getManagedProduct(ids[0]),
     (error) => error.status === 502
   )
+})
+
+test("admin reads pending vendor products through the cross-vendor review endpoint", async (t) => {
+  const calls = []
+  const pending = {
+    product: { id: ids[0], name: "Pending chair", status: "pending" },
+    category: { id: ids[1], name: "Equipment" },
+    detail: { id: ids[0], model: "C1" },
+    variants: [{ id: ids[2], name: "Default" }],
+    specifications: [{ id: ids[3], name: "Material" }],
+    taxes: [],
+    certificates: [],
+    seller: { id: ids[1], name: "Vendor" },
+    ready: true,
+  }
+  mock(t, (url, options) => {
+    calls.push(url.pathname)
+    assert.equal(options.headers.get("Authorization"), "Bearer fixture-access")
+    return Response.json(envelope(pending))
+  })
+  session.saveSession({ ...fixtureUser, role: "admin" }, "fixture-access")
+  const product = await getManagedProduct(ids[0], "admin")
+  const detail = await getProductResource(ids[0], "detail", "admin")
+  const variants = await getProductResource(ids[0], "variants", "admin")
+  assert.equal(product.product.status, "pending")
+  assert.equal(detail.model, "C1")
+  assert.equal(variants[0].id, ids[2])
+  assert.deepEqual(calls, Array(3).fill(`/getty/v1/product/reviews/${ids[0]}`))
 })
 
 test("the supplied product details shape preserves media links, nullable fields and live stock", async (t) => {
@@ -3415,7 +3513,7 @@ test("the management product list preserves filters and nextCursor/previousCurso
   assert.equal(result.previousCursor, "30")
 })
 
-test("fresh login survives a background resource rejection and failed refresh", async (t) => {
+test("a background resource rejection signs out after failed refresh", async (t) => {
   const calls = []
   mock(t, (url) => {
     calls.push(url.pathname)
@@ -3439,14 +3537,15 @@ test("fresh login survives a background resource rejection and failed refresh", 
     apiRequest("/getty/v1/product/products"),
     (error) => error.status === 401
   )
-  assert.equal(session.readSession().sessionId, original.sessionId)
-  assert.deepEqual(session.readSession().user, original.user)
-  assert.equal(session.readSession().accessToken, tokenPair.accessToken)
-  assert.equal(session.readSession().refreshToken, tokenPair.refreshToken)
-  assert.equal(session.readSession().refreshRejected, true)
+  assert.notEqual(original.sessionId, null)
+  assert.equal(session.readSession().sessionId, null)
+  assert.equal(session.readSession().user, null)
+  assert.equal(session.readSession().accessToken, null)
+  assert.equal(session.readSession().refreshToken, null)
+  assert.equal(session.readSession().refreshRejected, false)
 })
 
-test("rejected renewal is not retried on navigation or restored browser sessions", async (t) => {
+test("rejected renewal signs out and is not retried on navigation or reload", async (t) => {
   let refreshes = 0
   mock(t, (url) => {
     if (url.pathname === refreshPath) refreshes++
@@ -3467,11 +3566,11 @@ test("rejected renewal is not retried on navigation or restored browser sessions
   )
   assert.equal(refreshes, 1)
   const restored = reloadSessionStore(t)
-  assert.equal(restored.readSession().refreshRejected, true)
-  assert.equal(restored.readSession().user.id, fixtureUser.id)
+  assert.equal(restored.readSession().refreshRejected, false)
+  assert.equal(restored.readSession().user, null)
 })
 
-test("signing in again resets rejected renewal so new credentials can refresh", async (t) => {
+test("signing in again after failed renewal allows new credentials to refresh", async (t) => {
   let allow = false,
     refreshes = 0
   mock(t, (url, options) => {
@@ -3488,7 +3587,7 @@ test("signing in again resets rejected renewal so new credentials can refresh", 
     apiRequest("/getty/v1/order/cart"),
     (error) => error.status === 401
   )
-  assert.equal(session.readSession().refreshRejected, true)
+  assert.equal(session.readSession().user, null)
   allow = true
   session.saveSession(fixtureUser, tokenPair)
   assert.equal(session.readSession().refreshRejected, false)
@@ -3671,7 +3770,7 @@ test("cookie-only renewal persists the profile, drops the stale bearer and survi
   assert.equal(restored.refreshRejected, false)
 })
 
-test("empty successful refresh bodies are accepted while malformed responses preserve credentials", async (t) => {
+test("empty successful refresh bodies are accepted while malformed responses sign out", async (t) => {
   let response = new Response("<html>not a refresh response</html>", {
     status: 200,
   })
@@ -3686,7 +3785,7 @@ test("empty successful refresh bodies are accepted while malformed responses pre
     apiRequest("/getty/v1/order/cart"),
     (error) => error.status === 502
   )
-  assert.equal(session.accessToken(), tokenPair.accessToken)
+  assert.equal(session.accessToken(), null)
   for (const status of [200, 204]) {
     session.saveSession(fixtureUser, tokenPair)
     response = new Response(null, { status })
@@ -3763,7 +3862,7 @@ test("all queued requests stop after one cookie renewal when the replay still re
   assert.equal(session.readSession().user.id, fixtureUser.id)
 })
 
-test("failed cookie renewal rejects every queued request without logging the user out", async (t) => {
+test("failed cookie renewal rejects every queued request and signs out", async (t) => {
   let refreshes = 0
   const started = deferred(),
     finish = deferred()
@@ -3789,8 +3888,8 @@ test("failed cookie renewal rejects every queued request without logging the use
     true
   )
   assert.equal(refreshes, 1)
-  assert.equal(session.readSession().refreshRejected, true)
-  assert.equal(session.readSession().user.id, fixtureUser.id)
+  assert.equal(session.readSession().refreshRejected, false)
+  assert.equal(session.readSession().user, null)
 })
 
 test("HTTP 200 envelopes with status 401 also trigger the Axios renewal interceptor", async (t) => {
