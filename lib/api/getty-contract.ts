@@ -127,6 +127,8 @@ export const CatalogProductDetailSchema = z.intersection(
         manufacturer: z.string().nullable(),
         model: z.string().nullable(),
         origin: z.string().nullable(),
+        originName: z.string().nullish(),
+        youtubeEmbed: z.string().nullish(),
         usage: z.string().nullable(),
         instructions: z.string().nullable(),
         warnings: z.string().nullable(),
@@ -158,7 +160,7 @@ export const ProductRatingSchema = z.object({
   title: z.string().nullable(),
   comment: z.string().nullable(),
   date: z.iso.datetime({ offset: true }),
-  verified: z.literal(true),
+  verified: z.boolean(),
 })
 export type ProductRating = z.infer<typeof ProductRatingSchema>
 
@@ -213,6 +215,13 @@ export const CatalogPageResponseSchema = z.object({
   data: CatalogPageSchema,
 })
 export type CatalogPageResponse = z.infer<typeof CatalogPageResponseSchema>
+
+export const RelatedProductsResponseSchema = z.object({
+  status: z.number().int().safe().min(200).max(200),
+  success: z.literal(true),
+  message: z.string(),
+  data: z.array(CatalogProductSchema),
+})
 
 export const ProductDetailResponseSchema = z.object({
   status: z.number().int().safe().min(200).max(200),

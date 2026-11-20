@@ -34,9 +34,11 @@ import {
 export default function ProductTaxAssignments({
   product,
   readScope = "tenant",
+  canManage = true,
 }: {
   product: string
   readScope?: ProductReadScope
+  canManage?: boolean
 }) {
   const query = useQuery({
     queryKey: ["managed-product", product, readScope, "taxes"],
@@ -47,7 +49,7 @@ export default function ProductTaxAssignments({
   const taxes = useQuery({
     queryKey: ["portal", "taxes"],
     queryFn: () => portalRecords("taxes"),
-    enabled: open,
+    enabled: open && canManage,
   })
   const mutation = useProductMutation(product)
   const available =
@@ -55,13 +57,14 @@ export default function ProductTaxAssignments({
       (tax) => !query.data?.some((assigned) => assigned.id === tax.id)
     ) ?? []
   async function submit({ tax }: { tax: string }) {
+    if (!canManage) return
     await mutation.run(
       () => saveProductResource(product, "taxes", "POST", { tax }),
       "Tax assigned.",
       () => setOpen(false)
     )
   }
-  if (open)
+  if (open && canManage)
     return (
       <FormCard
         title="Assign tax"
@@ -120,20 +123,20 @@ export default function ProductTaxAssignments({
   return (
     <section>
       <ProductPanelHeading
-        title="Taxes"
-        description="Tax rates currently assigned to this product."
         action={
-          <Button
-            className="rounded-lg text-sm"
-            disabled={!query.isSuccess}
-            onClick={() => {
-              mutation.setError("")
-              setOpen(true)
-            }}
-          >
-            <Plus aria-hidden className="size-4" />
-            Assign tax
-          </Button>
+          canManage && (
+            <Button
+              className="rounded-lg text-sm"
+              disabled={!query.isSuccess}
+              onClick={() => {
+                mutation.setError("")
+                setOpen(true)
+              }}
+            >
+              <Plus aria-hidden className="size-4" />
+              Assign tax
+            </Button>
+          )
         }
       />
       {query.isPending ? (
@@ -152,29 +155,33 @@ export default function ProductTaxAssignments({
             { key: "name", label: "Tax" },
             { key: "rate", label: "Rate (%)" },
           ]}
-          actions={(item) => (
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={`Remove ${item.name}`}
-              onClick={() => {
-                mutation.setError("")
-                setRemove(item)
-              }}
-            >
-              <Trash2 aria-hidden className="size-4" />
-            </Button>
-          )}
+          actions={
+            canManage
+              ? (item) => (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Remove ${item.name}`}
+                    onClick={() => {
+                      mutation.setError("")
+                      setRemove(item)
+                    }}
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </Button>
+                )
+              : undefined
+          }
         />
       )}
       <DeleteProductItem
         name={valueText(remove?.name, "tax assignment")}
-        open={Boolean(remove)}
+        open={canManage && Boolean(remove)}
         onClose={() => setRemove(null)}
         busy={mutation.busy}
         error={mutation.error}
         onConfirm={() => {
-          if (remove)
+          if (canManage && remove)
             void mutation.run(
               () => deleteProductResource(product, "taxes", remove.id),
               "Tax removed from product.",

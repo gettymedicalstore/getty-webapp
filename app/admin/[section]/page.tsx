@@ -12,6 +12,7 @@ import TaxesPage from "@/features/admin/components/taxes-page"
 import CategoriesPage from "@/features/admin/components/categories-page"
 import FeaturedPage from "@/features/featured/components/featured-page"
 import AllProductsPage from "@/features/admin/components/all-products-page"
+import TeamProfiles from "@/features/admin/components/team-profiles"
 export default async function AdminSection({
   params,
 }: {
@@ -23,6 +24,7 @@ export default async function AdminSection({
   if (section === "payments") return <PaymentRecoveryPage />
   if (section === "all-products") return <AllProductsPage />
   if (section === "featured") return <FeaturedPage />
+  if (section === "users") return <TeamProfiles />
   if (section === "suppliers") redirect("/admin/vendors")
   if (section === "taxes") return <TaxesPage />
   if (section === "categories") return <CategoriesPage />

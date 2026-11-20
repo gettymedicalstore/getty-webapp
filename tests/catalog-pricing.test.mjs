@@ -29,6 +29,7 @@ require.extensions[".ts"] = (module, filename) =>
 
 const {
   catalogPricing,
+  preferredProductVariant,
   selectProductVariant,
   productPricing,
 } = require("../features/products/utils/product-pricing.ts")
@@ -173,6 +174,15 @@ test("detail selection uses the chosen variant's price and removes a different v
   ])
   assert.equal(guest.total, 16000)
   assert.equal(guest.discount, 0)
+})
+
+test("product details initially select a purchasable variant, while honoring an explicit selection", () => {
+  const unavailableDefault = { ...variant, inStock: false }
+  const availableOption = { ...variant, id, isDefault: false, inStock: true }
+  const variants = [unavailableDefault, availableOption]
+  assert.equal(preferredProductVariant(variants, null)?.id, id)
+  assert.equal(preferredProductVariant(variants, other)?.id, other)
+  assert.equal(preferredProductVariant([unavailableDefault], null)?.id, other)
 })
 
 test("server cart prices are already effective and are never discounted again", () => {

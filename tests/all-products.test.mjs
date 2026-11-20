@@ -122,6 +122,24 @@ test("all-products pagination preserves explicit availability and zero cursors",
 test("All products navigation is admin-only and distinct from own products", () => {
   const links = (role) =>
     navigation.workspaceMenus[role].flatMap((item) => item.children ?? [item])
+  const adminCatalogue = navigation.workspaceMenus.admin.find(
+    (item) => item.label === "Catalogue controls"
+  )
+  const adminProduct = navigation.workspaceMenus.admin.find(
+    (item) => item.label === "Product"
+  )
+  assert.equal(adminCatalogue?.children?.length, 3)
+  assert.equal(adminProduct?.sectionLabel, "My Product & stock")
+  assert.ok(
+    adminCatalogue.children.every((item) =>
+      ["Categories", "All products", "Featured products"].includes(item.label)
+    )
+  )
+  assert.ok(
+    adminProduct.children.every((item) =>
+      ["Taxes", "Products", "Inventory"].includes(item.label)
+    )
+  )
   assert.ok(links("admin").some((item) => item.href === "/admin/all-products"))
   assert.ok(links("admin").some((item) => item.href === "/admin/products"))
   assert.equal(

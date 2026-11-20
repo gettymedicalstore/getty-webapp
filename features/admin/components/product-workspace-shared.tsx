@@ -55,6 +55,8 @@ export function useProductMutation(product: string) {
         client.invalidateQueries({ queryKey: ["managed-product", product] }),
         client.invalidateQueries({ queryKey: ["products"] }),
         client.invalidateQueries({ queryKey: ["inventory"] }),
+        client.invalidateQueries({ queryKey: ["admin", "all-products"] }),
+        client.invalidateQueries({ queryKey: ["admin", "dashboard"] }),
       ])
       toast.success(message)
       done?.()
@@ -187,24 +189,6 @@ export function DeleteProductItem({
   )
 }
 
-export function ProductPanelHeading({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  description: string
-  action?: ReactNode
-}) {
-  return (
-    <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight text-[#283c30]">
-          {title}
-        </h2>
-        <p className="mt-1 text-sm leading-6 text-[#5e6f63]">{description}</p>
-      </div>
-      {action}
-    </div>
-  )
+export function ProductPanelHeading({ action }: { action?: ReactNode }) {
+  return action ? <div className="mb-5 flex justify-end">{action}</div> : null
 }

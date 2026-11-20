@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Copy,
-  Heart,
   Minus,
   Plus,
   ShoppingCart,
@@ -21,7 +20,7 @@ import { toast } from "sonner"
 import { Facebook, Pinterest, Twitter } from "@/components/svgs/socials"
 import { Button } from "@/components/ui/button"
 import { useCart } from "@/features/cart/hooks/use-cart"
-import { useWishlist } from "@/features/wishlist/hooks/use-wishlist"
+import { safeYouTubeEmbedUrl } from "@/lib/youtube"
 
 import {
   isProductInStock,
@@ -30,15 +29,18 @@ import {
 } from "../../utils/availability"
 import ProductPrice from "./product-price"
 import ProductReviews from "./product-reviews"
+import RelatedProducts from "./related-products"
 import { productQueryOptions } from "../../api/get-product"
-import { selectProductVariant } from "../../utils/product-pricing"
+import {
+  preferredProductVariant,
+  selectProductVariant,
+} from "../../utils/product-pricing"
 
 export default function ProductDetails({ slug }: { slug: string }) {
   const productQuery = useQuery(productQueryOptions(slug))
 
   const router = useRouter()
   const cart = useCart()
-  const wishlist = useWishlist()
 
   const [quantity, setQuantity] = useState(1)
   const [variantId, setVariantId] = useState<string | null>(null)
@@ -61,10 +63,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
   }
 
   const baseProduct = productQuery.data
-  const variant =
-    baseProduct.variants?.find((v) => v.id === variantId) ??
-    baseProduct.variants?.find((v) => v.isDefault) ??
-    baseProduct.variants?.[0]
+  const variant = preferredProductVariant(baseProduct.variants, variantId)
   const product = variant
     ? selectProductVariant(baseProduct, variant)
     : baseProduct
@@ -82,8 +81,69 @@ export default function ProductDetails({ slug }: { slug: string }) {
       ? item.variantId === product.variantId
       : item.productId === product.id
   )
-  const isWishlisted = wishlist.hasProduct(product.id)
   const rating = Math.min(5, Math.max(0, product.rating ?? 0))
+  const detail = product.detail
+  const youtubeEmbed = safeYouTubeEmbedUrl(detail?.youtubeEmbed)
+  const originName = detail?.originName?.trim()
+  const originCode = detail?.origin?.trim()
+  const productFacts = detail
+    ? [
+        { label: "Manufacturer", value: detail.manufacturer },
+        { label: "Model", value: detail.model },
+        {
+          label: "Country of origin",
+          value: originName
+            ? `${originName}${originCode ? ` (${originCode})` : ""}`
+            : originCode,
+        },
+      ].filter((item) => item.value?.trim())
+    : []
+  const careFacts = detail
+    ? [
+        {
+          label: "Sterile",
+          value: detail.sterile == null ? null : detail.sterile ? "Yes" : "No",
+        },
+        {
+          label: "Disposable",
+          value:
+            detail.disposable == null ? null : detail.disposable ? "Yes" : "No",
+        },
+        {
+          label: "Requires cold storage",
+          value:
+            detail.coldchain == null ? null : detail.coldchain ? "Yes" : "No",
+        },
+        {
+          label: "Shelf life",
+          value: detail.shelflife == null ? null : `${detail.shelflife} days`,
+        },
+        {
+          label: "Warranty",
+          value: detail.warranty == null ? null : `${detail.warranty} months`,
+        },
+        {
+          label: "Dispatch time",
+          value: detail.dispatch == null ? null : `${detail.dispatch} days`,
+        },
+      ].filter((item) => item.value?.trim())
+    : []
+  const usageDetails = detail
+    ? [
+        { label: "Intended use", value: detail.usage },
+        { label: "Instructions", value: detail.instructions },
+        { label: "Warnings", value: detail.warnings },
+      ].filter((item) => item.value?.trim())
+    : []
+  const specifications =
+    product.specifications?.filter(
+      (item) => item.name.trim() && item.value.trim()
+    ) ?? []
+  const hasDetails =
+    specifications.length > 0 ||
+    productFacts.length > 0 ||
+    careFacts.length > 0 ||
+    usageDetails.length > 0
 
   function previousImage() {
     setSelectedImageIndex((current) =>
@@ -212,7 +272,7 @@ export default function ProductDetails({ slug }: { slug: string }) {
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-4">
+                <div>
                   <p>
                     <span className="font-normal">Availability: </span>
 
@@ -234,40 +294,6 @@ export default function ProductDetails({ slug }: { slug: string }) {
                       </>
                     )}
                   </p>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span>Share product:</span>
-
-                    <button
-                      type="button"
-                      onClick={copyProductLink}
-                      aria-label="Copy product link"
-                      className="hover:text-primary grid size-11 cursor-pointer place-items-center rounded-lg text-[#5e6f63] transition-colors"
-                    >
-                      <Copy aria-hidden className="size-4" />
-                    </button>
-
-                    <SocialButton
-                      label="Share on Facebook"
-                      onClick={shareOnFacebook}
-                    >
-                      <Facebook className="size-4" />
-                    </SocialButton>
-
-                    <SocialButton
-                      label="Share on Twitter"
-                      onClick={shareOnTwitter}
-                    >
-                      <Twitter className="size-4" />
-                    </SocialButton>
-
-                    <SocialButton
-                      label="Share on Pinterest"
-                      onClick={shareOnPinterest}
-                    >
-                      <Pinterest className="size-4" />
-                    </SocialButton>
-                  </div>
                 </div>
               </div>
 
@@ -286,8 +312,8 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 )}
               </div>
 
-              {baseProduct.variants && (
-                <label className="text-sm font-medium">
+              {baseProduct.variants && baseProduct.variants.length > 1 && (
+                <label className="mb-3 text-sm font-medium">
                   Product option
                   <select
                     className="form-input mt-2"
@@ -349,73 +375,158 @@ export default function ProductDetails({ slug }: { slug: string }) {
                 </Button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => wishlist.toggleProduct(product)}
-                aria-pressed={isWishlisted}
-                className="hover:text-primary flex min-h-11 w-fit cursor-pointer items-center gap-2 rounded-lg text-base leading-6 font-semibold text-[#535862] transition-colors"
-              >
-                <Heart
-                  aria-hidden
-                  className={`size-5 ${
-                    isWishlisted ? "fill-primary text-primary" : ""
-                  }`}
-                  strokeWidth={1.67}
-                />
+              <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4 text-sm text-[#5e6f63]">
+                <span className="mr-1">Share product:</span>
 
-                {isWishlisted ? "Remove from Wishlist" : "Add to Wishlist"}
-              </button>
+                <button
+                  type="button"
+                  onClick={copyProductLink}
+                  aria-label="Copy product link"
+                  className="hover:text-primary grid size-11 cursor-pointer place-items-center rounded-lg text-[#5e6f63] transition-colors"
+                >
+                  <Copy aria-hidden className="size-4" />
+                </button>
+
+                <SocialButton
+                  label="Share on Facebook"
+                  onClick={shareOnFacebook}
+                >
+                  <Facebook className="size-4" />
+                </SocialButton>
+
+                <SocialButton label="Share on Twitter" onClick={shareOnTwitter}>
+                  <Twitter className="size-4" />
+                </SocialButton>
+
+                <SocialButton
+                  label="Share on Pinterest"
+                  onClick={shareOnPinterest}
+                >
+                  <Pinterest className="size-4" />
+                </SocialButton>
+              </div>
             </div>
           </div>
         </div>
-        {product.specifications && product.specifications.length > 0 && (
-          <div className="mt-6 rounded-xl bg-white p-5">
-            <h2 className="text-lg font-semibold">Specifications</h2>
-            <dl className="mt-4 divide-y">
-              {product.specifications.map((s, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-2 gap-4 py-3 text-sm"
-                >
-                  <dt>{s.name}</dt>
-                  <dd>
-                    {s.value} {s.unit}
-                  </dd>
+        {youtubeEmbed && (
+          <section
+            aria-label="Product video"
+            className="mt-6 rounded-2xl border border-[#e3eae3] bg-white px-5 py-6 sm:px-8 sm:py-8"
+          >
+            <h2 className="text-xl font-semibold text-[#252B37] sm:text-2xl">
+              Product video
+            </h2>
+            <div className="mt-5 aspect-video w-full overflow-hidden rounded-xl bg-[#f1f5f1]">
+              <iframe
+                src={youtubeEmbed}
+                title={`${product.name} video`}
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="h-full w-full border-0"
+              />
+            </div>
+          </section>
+        )}
+        {hasDetails && (
+          <section className="mt-6 rounded-2xl border border-[#e3eae3] bg-white px-5 py-6 sm:px-8 sm:py-8">
+            <h2 className="text-xl font-semibold text-[#252B37] sm:text-2xl">
+              Product details
+            </h2>
+            <div className="mt-6 grid gap-x-12 gap-y-9 border-t border-[#e3eae3] pt-6 lg:grid-cols-2">
+              {specifications.length > 0 && (
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-[#183c2c]">
+                    Specifications
+                  </h3>
+                  <dl className="mt-3 divide-y divide-[#edf0ed]">
+                    {specifications.map((item, index) => (
+                      <div
+                        key={`${item.name}-${index}`}
+                        className="grid min-w-0 gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:gap-4"
+                      >
+                        <dt className="text-sm text-[#667568]">{item.name}</dt>
+                        <dd className="text-sm font-medium break-words text-[#252B37]">
+                          {item.value}
+                          {item.unit ? ` ${item.unit}` : ""}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 </div>
-              ))}
-            </dl>
-          </div>
+              )}
+
+              {productFacts.length > 0 && (
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-[#183c2c]">
+                    Product information
+                  </h3>
+                  <dl className="mt-3 divide-y divide-[#edf0ed]">
+                    {productFacts.map((item) => (
+                      <div
+                        key={item.label}
+                        className="grid min-w-0 gap-1 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:gap-4"
+                      >
+                        <dt className="text-sm text-[#667568]">{item.label}</dt>
+                        <dd className="text-sm font-medium break-words text-[#252B37]">
+                          {item.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+
+              {usageDetails.length > 0 && (
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-[#183c2c]">
+                    Usage and safety
+                  </h3>
+                  <dl className="mt-3 space-y-4">
+                    {usageDetails.map((item) => (
+                      <div key={item.label} className="min-w-0">
+                        <dt className="text-sm font-medium text-[#344e3d]">
+                          {item.label}
+                        </dt>
+                        <dd className="mt-1 max-w-prose text-sm leading-6 break-words whitespace-pre-wrap text-[#535f56]">
+                          {item.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+
+              {careFacts.length > 0 && (
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-[#183c2c]">
+                    Care and delivery
+                  </h3>
+                  <dl className="mt-3 grid gap-x-6 gap-y-0 sm:grid-cols-2">
+                    {careFacts.map((item) => (
+                      <div
+                        key={item.label}
+                        className="min-w-0 border-t border-[#edf0ed] py-3"
+                      >
+                        <dt className="text-sm text-[#667568]">{item.label}</dt>
+                        <dd className="mt-1 text-sm font-medium break-words text-[#252B37]">
+                          {item.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+            </div>
+          </section>
         )}
-        {product.detail && (
-          <div className="mt-6 rounded-xl bg-white p-5">
-            <h2 className="text-lg font-semibold">Product information</h2>
-            <dl className="mt-4 space-y-3">
-              {Object.entries(product.detail)
-                .filter(([, value]) => value !== null)
-                .map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="text-sm font-medium capitalize">
-                      {key === "shelflife"
-                        ? "Shelf life (days)"
-                        : key === "warranty"
-                          ? "Warranty (months)"
-                          : key === "dispatch"
-                            ? "Dispatch (days)"
-                            : key}
-                    </dt>
-                    <dd className="mt-1 text-sm whitespace-pre-wrap text-[#535862]">
-                      {typeof value === "boolean"
-                        ? value
-                          ? "Yes"
-                          : "No"
-                        : String(value)}
-                    </dd>
-                  </div>
-                ))}
-            </dl>
-          </div>
+        {product.source === "remote" && (
+          <>
+            <RelatedProducts productId={product.id} />
+            <ProductReviews product={product.id} />
+          </>
         )}
-        {product.source === "remote" && <ProductReviews product={product.id} />}
       </div>
     </section>
   )

@@ -436,6 +436,15 @@ function Fields({
               Use a photo from the selected product, or upload a different
               image.
             </p>
+            <p
+              id="featured-photo-guidance"
+              className="mt-2 text-xs leading-5 text-[#506858]"
+            >
+              For the homepage, choose a sharp 4:3 landscape photo (ideally 1200
+              × 900 pixels or larger). Keep the product centered with space
+              around it on a plain, light background. JPG, PNG and WebP are
+              supported.
+            </p>
           </div>
           {product && productPhotos.isPending && (
             <p role="status" className="text-xs text-[#5e6f63]">
@@ -531,7 +540,7 @@ function Fields({
             type="file"
             accept="image/jpeg,image/png,image/webp"
             aria-label="Choose advert image"
-            aria-describedby="featured-photo-error"
+            aria-describedby="featured-photo-guidance featured-photo-error"
             className="sr-only"
             disabled={busy || uploading}
             onChange={(event) => {

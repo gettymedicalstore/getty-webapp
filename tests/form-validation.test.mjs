@@ -33,6 +33,7 @@ for (const extension of [".ts", ".tsx"])
       filename
     )
 const schemas = require("../lib/form-schemas.ts")
+const { safeYouTubeEmbedUrl } = require("../lib/youtube.ts")
 const { loginSchema } = require("../features/auth/schemas/login-schema.tsx")
 const {
   resetPasswordFormSchema,
@@ -59,6 +60,7 @@ const signup = {
   phone: "08012345678",
   country: "NG",
   address: "10 Example Street",
+  agreement: true,
 }
 
 test("RHF only submits schema-valid data and supplies normalized numeric values", async () => {
@@ -123,6 +125,17 @@ test("signup validates the selected country and phone together", () => {
     schemas.signupFormSchema.safeParse({ ...signup, email: "invalid" }).success,
     false
   )
+})
+
+test("signup requires agreement before requesting a verification code", () => {
+  for (const agreement of [false, undefined]) {
+    const parsed = schemas.signupFormSchema.safeParse({ ...signup, agreement })
+    assert.equal(parsed.success, false)
+    assert.ok(
+      parsed.error.issues.some((issue) => issue.path[0] === "agreement")
+    )
+  }
+  assert.equal(schemas.signupFormSchema.parse(signup).agreement, true)
 })
 
 test("verification codes must have exactly six digits and preserve leading zeros", () => {
@@ -221,6 +234,53 @@ test("tax percentages are bounded and optional detail measurements stay nullable
   assert.equal(result.warranty, null)
   assert.equal(result.shelflife, 0)
   assert.equal(result.dispatch, 2)
+  assert.equal(result.youtube, "")
+})
+
+test("product details accept a YouTube link or an empty removal value", () => {
+  const base = {
+    sterile: "",
+    disposable: "",
+    coldchain: "",
+    warranty: "",
+    shelflife: "",
+    dispatch: "",
+  }
+  assert.equal(
+    schemas.productDetailsFormSchema.parse({
+      ...base,
+      youtube: "https://youtu.be/dQw4w9WgXcQ",
+    }).youtube,
+    "https://youtu.be/dQw4w9WgXcQ"
+  )
+  assert.equal(
+    schemas.productDetailsFormSchema.parse({ ...base, youtube: "" }).youtube,
+    ""
+  )
+  for (const youtube of [
+    "https://example.com/watch?v=dQw4w9WgXcQ",
+    "http://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube.com/watch?v=invalid",
+  ]) {
+    assert.equal(
+      schemas.productDetailsFormSchema.safeParse({ ...base, youtube }).success,
+      false
+    )
+  }
+})
+
+test("only trusted YouTube embed URLs can reach the product iframe", () => {
+  assert.equal(
+    safeYouTubeEmbedUrl("https://www.youtube.com/embed/dQw4w9WgXcQ"),
+    "https://www.youtube.com/embed/dQw4w9WgXcQ"
+  )
+  for (const value of [
+    "https://example.com/embed/dQw4w9WgXcQ",
+    "https://www.youtube.com.evil.test/embed/dQw4w9WgXcQ",
+    "http://www.youtube.com/embed/dQw4w9WgXcQ",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  ])
+    assert.equal(safeYouTubeEmbedUrl(value), null)
 })
 
 test("duplicate variant options report the specific option to correct", () => {

@@ -31,6 +31,19 @@ export function selectProductVariant(
   }
 }
 
+export function preferredProductVariant(
+  variants: CatalogVariant[] | undefined,
+  selectedId: string | null
+): CatalogVariant | undefined {
+  return (
+    variants?.find((variant) => variant.id === selectedId) ??
+    variants?.find((variant) => variant.isDefault && variant.inStock) ??
+    variants?.find((variant) => variant.inStock) ??
+    variants?.find((variant) => variant.isDefault) ??
+    variants?.[0]
+  )
+}
+
 export function productPricing(price: number, compareAtPrice?: number | null) {
   const discounted =
     Number.isFinite(price) &&

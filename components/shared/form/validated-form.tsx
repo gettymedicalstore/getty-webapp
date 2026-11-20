@@ -174,11 +174,17 @@ export function FormCheckbox({
   id: providedId,
   className,
   disabled,
+  "aria-label": ariaLabel,
+  required,
+  children,
 }: {
   name: string
   id?: string
   className?: string
   disabled?: boolean
+  "aria-label"?: string
+  required?: boolean
+  children?: ReactNode
 }) {
   const { field, fieldState } = useController({ name, defaultValue: false })
   const generatedId = useId()
@@ -186,19 +192,24 @@ export function FormCheckbox({
   const errorId = `${id}-error`
 
   return (
-    <span className="block shrink-0">
-      <Checkbox
-        id={id}
-        name={field.name}
-        inputRef={field.ref}
-        checked={Boolean(field.value)}
-        onCheckedChange={field.onChange}
-        onBlur={field.onBlur}
-        disabled={disabled}
-        aria-invalid={Boolean(fieldState.error)}
-        aria-describedby={fieldState.error ? errorId : undefined}
-        className={className}
-      />
+    <span className={cn("block", !children && "shrink-0")}>
+      <span className={cn(children && "flex items-start gap-3")}>
+        <Checkbox
+          id={id}
+          name={field.name}
+          inputRef={field.ref}
+          checked={Boolean(field.value)}
+          onCheckedChange={field.onChange}
+          onBlur={field.onBlur}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          aria-required={required || undefined}
+          aria-invalid={Boolean(fieldState.error)}
+          aria-describedby={fieldState.error ? errorId : undefined}
+          className={className}
+        />
+        {children}
+      </span>
       <FieldError id={errorId} message={fieldState.error?.message} />
     </span>
   )

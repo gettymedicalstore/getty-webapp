@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Check,
   Copy,
-  Heart,
   Minus,
   Plus,
   ShoppingCart,
@@ -35,8 +34,6 @@ type ProductDetailsDialogProps = {
   onOpenChange: (open: boolean) => void
   onAddToCart?: (product: Product, quantity: number) => void
   onBuyNow?: (product: Product, quantity: number) => void
-  onToggleWishlist?: (product: Product) => void
-  isWishlisted?: boolean
 }
 
 export default function ProductDetailsDialog({
@@ -45,8 +42,6 @@ export default function ProductDetailsDialog({
   onOpenChange,
   onAddToCart,
   onBuyNow,
-  onToggleWishlist,
-  isWishlisted = false,
 }: ProductDetailsDialogProps) {
   const productImages = product.images?.length
     ? product.images
@@ -267,21 +262,6 @@ export default function ProductDetailsDialog({
                 Buy now
               </Button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => onToggleWishlist?.(product)}
-              aria-pressed={isWishlisted}
-              className="hover:text-primary mt-5 flex w-fit cursor-pointer items-center gap-2 text-sm font-medium text-[#414651] transition"
-            >
-              <Heart
-                className={`size-5 ${
-                  isWishlisted ? "fill-primary text-primary" : ""
-                }`}
-              />
-
-              {isWishlisted ? "Remove from Wishlist" : "Add to Wishlist"}
-            </button>
 
             <div className="mt-6 rounded-md border border-[#E9EAEB] p-5">
               <p className="text-sm font-medium text-[#414651]">

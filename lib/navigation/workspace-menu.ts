@@ -19,36 +19,24 @@ export type WorkspaceLink = {
   icon: LucideIcon
   exact?: boolean
   aliases?: string[]
+  profileAdminsOnly?: boolean
+  sectionLabel?: string
 }
 export type WorkspaceGroup = {
   label: string
   icon: LucideIcon
   children: WorkspaceLink[]
+  sectionLabel?: string
 }
 export type WorkspaceItem = WorkspaceLink | WorkspaceGroup
 
-function productGroup(
-  base: string,
-  includeCategories: boolean
-): WorkspaceGroup {
+function productGroup(base: string): WorkspaceGroup {
   return {
     label: "Product",
     icon: Package,
     children: [
-      ...(includeCategories
-        ? [
-            {
-              label: "Categories",
-              href: `${base}/categories`,
-              icon: LayoutGrid,
-            },
-          ]
-        : []),
       { label: "Taxes", href: `${base}/taxes`, icon: BadgePercent },
       { label: "Products", href: `${base}/products`, icon: Package },
-      ...(base === "/admin"
-        ? [{ label: "All products", href: "/admin/all-products", icon: Boxes }]
-        : []),
       { label: "Inventory", href: `${base}/inventory`, icon: Boxes },
     ],
   }
@@ -56,7 +44,13 @@ function productGroup(
 
 export const workspaceMenus: Record<WorkspaceRole, WorkspaceItem[]> = {
   admin: [
-    { label: "Dashboard", href: "/admin", icon: House, exact: true },
+    {
+      label: "Dashboard",
+      href: "/admin",
+      icon: House,
+      exact: true,
+      sectionLabel: "Administration",
+    },
     {
       label: "Vendors",
       href: "/admin/vendors",
@@ -64,9 +58,23 @@ export const workspaceMenus: Record<WorkspaceRole, WorkspaceItem[]> = {
       aliases: ["/admin/suppliers"],
     },
     { label: "Customers", href: "/admin/customers", icon: UsersRound },
-    productGroup("/admin", true),
-    { label: "Featured products", href: "/admin/featured", icon: Star },
+    {
+      label: "Users",
+      href: "/admin/users",
+      icon: UserRound,
+      profileAdminsOnly: true,
+    },
     { label: "Orders", href: "/admin/orders", icon: ClipboardList },
+    {
+      label: "Catalogue controls",
+      icon: LayoutGrid,
+      children: [
+        { label: "Categories", href: "/admin/categories", icon: LayoutGrid },
+        { label: "All products", href: "/admin/all-products", icon: Boxes },
+        { label: "Featured products", href: "/admin/featured", icon: Star },
+      ],
+    },
+    { ...productGroup("/admin"), sectionLabel: "My Product & stock" },
   ],
   customer: [
     { label: "Orders", href: "/customer/orders", icon: ClipboardList },
@@ -87,7 +95,7 @@ export const workspaceMenus: Record<WorkspaceRole, WorkspaceItem[]> = {
       href: "/supplier/orders",
       icon: ClipboardList,
     },
-    productGroup("/supplier", false),
+    productGroup("/supplier"),
     {
       label: "Account",
       href: "/supplier/account",

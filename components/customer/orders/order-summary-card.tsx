@@ -2,7 +2,6 @@ type OrderSummaryCardProps = {
   subtotal?: number
   delivery?: number
   discount?: number
-  tax?: number
   commission?: number
   total: number
   currency?: string
@@ -13,7 +12,6 @@ export default function OrderSummaryCard({
   subtotal,
   delivery,
   discount = 0,
-  tax,
   commission,
   total,
   currency = "NGN",
@@ -50,11 +48,6 @@ export default function OrderSummaryCard({
         <span className="font-semibold">Total</span>
         <span className="text-lg font-bold tabular-nums">{format(total)}</span>
       </div>
-      {tax != null && tax > 0 && (
-        <p className="text-muted-foreground mt-3 text-xs leading-5">
-          Includes {format(tax)} in tax.
-        </p>
-      )}
       {vendor && commission != null && (
         <div className="mt-4 border-t pt-4 text-sm">
           <SummaryRow label="Commission" value={format(commission)} />

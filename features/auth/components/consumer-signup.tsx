@@ -2,6 +2,7 @@
 import {
   ValidatedForm,
   FormInputField,
+  FormCheckbox,
 } from "@/components/shared/form/validated-form"
 import { otpFormSchema, signupFormSchema } from "@/lib/form-schemas"
 
@@ -149,7 +150,10 @@ export default function ConsumerSignup({
           </Link>
         </p>
       )}
-      <ValidatedForm<Record<string, string>, Record<string, string>>
+      <ValidatedForm<
+        Record<string, string | boolean>,
+        Record<string, string | boolean>
+      >
         key={`${step}:${pending?.codeExpiresAt ?? ""}`}
         schema={step === "verify" ? otpFormSchema : signupFormSchema}
         onSubmit={submit}
@@ -199,6 +203,32 @@ export default function ConsumerSignup({
               maxLength={1000}
               disabled={busy}
             />
+            <div className="pt-2">
+              <FormCheckbox
+                name="agreement"
+                id="signup-agreement"
+                aria-label="I agree to the Terms of Service"
+                required
+                disabled={busy}
+                className="mt-0.5 size-5 rounded-md"
+              >
+                <span className="text-muted-foreground text-sm leading-6">
+                  <label htmlFor="signup-agreement">I agree to the </label>
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-medium underline underline-offset-2"
+                  >
+                    Terms of Service
+                  </Link>
+                  <span className="text-red-600" aria-hidden="true">
+                    {" "}
+                    *
+                  </span>
+                </span>
+              </FormCheckbox>
+            </div>
           </>
         )}
         {step === "verify" && expired && (

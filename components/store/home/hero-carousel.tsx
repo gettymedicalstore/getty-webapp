@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowRight } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   publicFeaturedQueryOptions,
@@ -12,19 +12,17 @@ import {
 import { featuredStatus } from "@/features/featured/schema"
 import { productQueryOptions } from "@/features/products/api/get-product"
 import ProductCardImage from "@/features/products/components/store/product-card-image"
-import {
-  productMoney,
-  productPricing,
-} from "@/features/products/utils/product-pricing"
-
 export default function HeroCarousel() {
   const query = useQuery(publicFeaturedQueryOptions(20))
   const [now, setNow] = useState(() => Date.now())
-  const featured = (query.data ?? [])
+  const [featuredIndex, setFeaturedIndex] = useState(0)
+  const featuredArea = useRef<HTMLElement>(null)
+  const featuredItems = (query.data ?? [])
     .filter((entry) =>
       ["active", "unknown"].includes(featuredStatus(entry, now))
     )
-    .sort((a, b) => a.ordinal - b.ordinal)[0]
+    .sort((a, b) => a.ordinal - b.ordinal)
+  const featured = featuredItems[featuredIndex % featuredItems.length]
   useEffect(() => {
     const boundary = (query.data ?? [])
       .flatMap((entry) => [Date.parse(entry.starts), Date.parse(entry.ends)])
@@ -37,6 +35,21 @@ export default function HeroCarousel() {
     )
     return () => clearTimeout(timer)
   }, [query.data, now])
+  useEffect(() => {
+    if (featuredItems.length < 2) return
+    const timer = window.setInterval(() => {
+      if (
+        document.hidden ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+        featuredArea.current?.matches(":hover") ||
+        featuredArea.current?.contains(document.activeElement)
+      ) {
+        return
+      }
+      setFeaturedIndex((index) => (index + 1) % featuredItems.length)
+    }, 5500)
+    return () => window.clearInterval(timer)
+  }, [featuredItems.length])
   const showFeatured = query.isPending || Boolean(featured)
   const detail = useQuery(productQueryOptions(featured?.product ?? ""))
   const product = detail.data
@@ -44,9 +57,6 @@ export default function HeroCarousel() {
     ? `/products/${product?.slug ?? featured.product}`
     : "/products"
   const name = product?.name ?? featured?.productName ?? "Featured product"
-  const originalPrice = product
-    ? productPricing(product.price, product.compareAtPrice).originalPrice
-    : null
   return (
     <section
       className="relative isolate overflow-hidden border-b border-[#e3e9e5] bg-[#f8faf7]"
@@ -111,6 +121,7 @@ export default function HeroCarousel() {
         </div>
         {showFeatured && (
           <aside
+            ref={featuredArea}
             className="relative w-full max-w-[680px] min-w-0 justify-self-center pb-12 lg:justify-self-end lg:py-8"
             aria-label="Featured product"
           >
@@ -153,28 +164,6 @@ export default function HeroCarousel() {
                         className="p-0 sm:p-0"
                       />
                     </Link>
-                  </div>
-                  <div className="relative mt-3 flex flex-wrap items-center justify-between gap-4">
-                    <Link
-                      href={href}
-                      className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#11663f] underline-offset-4 transition hover:underline"
-                    >
-                      Explore product
-                      <ArrowRight className="size-4" aria-hidden />
-                    </Link>
-                    {product && (
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-xl font-semibold whitespace-nowrap text-[#145338] tabular-nums">
-                          <span className="sr-only">Price: </span>
-                          {productMoney(product.price, product.currency)}
-                        </span>
-                        {originalPrice !== null && (
-                          <del className="text-xs text-[#708778]">
-                            {productMoney(originalPrice, product.currency)}
-                          </del>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </>
               ) : query.isPending ? (

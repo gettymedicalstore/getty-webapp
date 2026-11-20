@@ -20,7 +20,6 @@ const cases = [
     "/track-order",
     "/contact",
     "/terms",
-    "/wishlist",
     "/cart",
     "/checkout",
     "/login",

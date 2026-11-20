@@ -11,14 +11,12 @@ import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import {
   ArrowUpRight,
-  Heart,
   Menu,
   Search,
   ShoppingBag,
   X,
   CircleHelp,
   Package,
-  UserRound,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -29,7 +27,6 @@ import {
 } from "@/lib/auth/navigation"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { useCart } from "@/features/cart/hooks/use-cart"
-import { useWishlist } from "@/features/wishlist/hooks/use-wishlist"
 import CustomerAccountMenu from "@/app/(store)/_components/layout/customer-account-menu"
 import CategoryMenu from "./category-menu"
 import DesktopNavigation from "./desktop-navigation"
@@ -38,7 +35,6 @@ import MobileNavigation from "./mobile-navigation"
 export default function StoreHeader() {
   const router = useRouter(),
     { cart } = useCart(),
-    wishlist = useWishlist(),
     session = useAuthSession()
   const user = session.data?.user
   const [mobileOpen, setMobileOpen] = useState(false),
@@ -120,14 +116,6 @@ export default function StoreHeader() {
         </Link>
         <div className="hidden min-w-0 flex-1 xl:block">{searchForm}</div>
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="hidden sm:block">
-            <HeaderAction
-              href="/wishlist"
-              label="Wishlist"
-              icon={Heart}
-              count={wishlist.products.length}
-            />
-          </div>
           <HeaderAction
             href="/cart"
             label="Shopping bag"
@@ -174,25 +162,11 @@ export default function StoreHeader() {
           </div>
           <div className="flex shrink-0 items-center gap-2 text-[15px] font-medium xl:gap-3">
             <Link
-              href={
-                user?.role === "customer"
-                  ? "/customer/account"
-                  : user
-                    ? `${accountHome(user.role)}/orders`
-                    : "/track-order"
-              }
+              href="/track-order"
               className="hover:text-primary inline-flex min-h-12 items-center gap-2 rounded-xl px-3 whitespace-nowrap text-[#52665a] transition hover:bg-[#f4f8f3]"
             >
-              {user?.role === "customer" ? (
-                <UserRound className="size-5" />
-              ) : (
-                <Package className="size-5" />
-              )}
-              {user
-                ? user.role === "customer"
-                  ? "Account"
-                  : "Manage orders"
-                : "Track order"}
+              <Package className="size-5" />
+              Track order
             </Link>
             <Link
               href={user ? accountHome(user.role) : "/supplier/register"}
@@ -226,7 +200,7 @@ function HeaderAction({
 }: {
   href: string
   label: string
-  icon: typeof Heart
+  icon: typeof ShoppingBag
   count?: number
 }) {
   return (

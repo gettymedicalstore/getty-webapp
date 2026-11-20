@@ -95,7 +95,7 @@ export default function CategoryTreeTable({
             setPage(0)
             setCollapsed(new Set())
           }}
-          className="relative w-full sm:max-w-xs"
+          className="relative w-full sm:max-w-sm"
         >
           <Search
             aria-hidden
@@ -106,30 +106,21 @@ export default function CategoryTreeTable({
             type="search"
             aria-label="Search categories"
             placeholder="Search categories…"
-            className="h-11 rounded-lg border-[#e2e8e3] pl-9 text-base shadow-none sm:text-sm"
+            className="h-11 w-full rounded-lg border border-[#dfe7e1] bg-white pr-3 pl-10 text-base text-[#263e30] shadow-none outline-none placeholder:text-[#8b988f] focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] sm:text-sm"
           />
         </ValidatedForm>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 sm:justify-end">
-          <p role="status" className="text-xs text-[#68776d]">
-            {filtered.length}{" "}
-            {filtered.length === 1 ? "category" : "categories"}
-            <span aria-hidden> · </span>
-            {allRows.length - filtered.length} subcategories
-            {search.trim() ? " in view" : ""}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-11 rounded-lg text-xs"
-            disabled={!branchIds.length}
-            onClick={() =>
-              setCollapsed(allCollapsed ? new Set() : new Set(branchIds))
-            }
-          >
-            {allCollapsed ? "Expand all" : "Collapse all"}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-11 rounded-lg text-xs"
+          disabled={!branchIds.length}
+          onClick={() =>
+            setCollapsed(allCollapsed ? new Set() : new Set(branchIds))
+          }
+        >
+          {allCollapsed ? "Expand all" : "Collapse all"}
+        </Button>
       </div>
 
       <table className="w-full table-fixed text-left text-sm">

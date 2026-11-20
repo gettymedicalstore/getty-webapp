@@ -398,13 +398,41 @@ await check("buyer-whole-order-receipt", "customer", async (page) => {
   await page.getByRole("tab", { name: /history/i }).click()
   assert.equal(await page.getByText(/supply receive/i).count(), 0)
 })
-await check("printed-order-code-lookup", "customer", async (page) => {
+await check("public-order-code-lookup", null, async (page) => {
+  const requests = []
+  await page.route("**/getty/ecommerce/orders/tracking/*", (route) => {
+    requests.push(route.request().url())
+    return route.fulfill({
+      json: {
+        status: 200,
+        success: true,
+        message: "OK",
+        data: {
+          orderCode: "2610-K7P4",
+          status: "processing",
+          fulfilment: "ready",
+          placed: "2026-11-19T10:00:00+01:00",
+          estimatedDelivery: null,
+          timeline: [
+            { status: "placed", at: "2026-11-19T10:00:00+01:00" },
+            { status: "ready", at: "2026-11-19T11:00:00+01:00" },
+          ],
+        },
+      },
+    })
+  })
   await goto(page, "/track-order")
-  await page.getByLabel("Order number").fill("2610-K7P4")
+  await page.getByLabel("Order number").fill(" 2610-k7p4 ")
   await page.getByRole("button", { name: "Track order" }).click()
-  await page.getByRole("heading", { name: "Getty delivery" }).waitFor()
-  await page.getByRole("link", { name: "View order details" }).waitFor()
+  await page.getByRole("heading", { name: "Delivery progress" }).waitFor()
   assert.equal(await page.getByText("2610-K7P4", { exact: true }).count(), 1)
+  assert.equal(
+    await page.locator('ol[aria-label="Delivery timeline"] li').count(),
+    5
+  )
+  assert.equal(requests.length, 1)
+  assert.ok(requests[0].endsWith("/2610-K7P4"))
+  assert.equal(await page.getByRole("link", { name: /sign in/i }).count(), 0)
 })
 await check("order-response-error", "supplier", async (page) => {
   await page.route("**/getty/v1/order/vendor?*", (route) =>
@@ -445,6 +473,16 @@ await check("product-photos", "admin", async (page) => {
 })
 await check("signup-validation", null, async (page) => {
   await goto(page, "/register")
+  const agreement = page.getByRole("checkbox", {
+    name: "I agree to the Terms of Service",
+  })
+  assert.equal(await agreement.isVisible(), true)
+  const uncheckedBorder = await agreement.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { width: style.borderTopWidth, color: style.borderTopColor }
+  })
+  assert.notEqual(uncheckedBorder.width, "0px")
+  assert.notEqual(uncheckedBorder.color, "rgba(0, 0, 0, 0)")
   await page
     .getByRole("button", { name: "Send verification code", exact: true })
     .click()
@@ -515,19 +553,18 @@ await check("hero-carousel", null, async (page) => {
   )
   await goto(page, "/")
   const title = await page.locator("h1").textContent()
-  const featuredTitle = page
-    .getByRole("complementary", { name: "Featured products" })
-    .locator("h3")
-  const productTitle = await featuredTitle.textContent()
-  await page
-    .getByRole("button", { name: "Next featured product", exact: true })
-    .click()
-  await page.waitForFunction(
-    (previous) => document.querySelector("aside h3")?.textContent !== previous,
-    productTitle
-  )
+  const featured = page.getByRole("complementary", {
+    name: "Featured product",
+  })
+  await featured.getByRole("link", { name: /^View / }).waitFor()
   assert.equal(await page.locator("h1").textContent(), title)
-  assert.notEqual(await featuredTitle.textContent(), productTitle)
+  assert.equal(await featured.getByText(product.name).count(), 0)
+  assert.equal(
+    await featured
+      .getByRole("button", { name: "Next featured product" })
+      .count(),
+    0
+  )
   await page
     .getByRole("heading", { name: "Our Products", exact: true })
     .waitFor()

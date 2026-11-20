@@ -12,6 +12,8 @@ npm run dev
 
 The public API configuration is `NEXT_PUBLIC_GETTY_API_BASE_URL=https://api.gettymedicalstores.com`. Restart development after changing it; rebuild for production because Next.js includes public environment values in the browser bundle. A missing value uses this live origin. There is no mock mode or local backend.
 
+Flutterwave returns to the URL configured on the **Getty API server** as `FLUTTERWAVE_CALLBACK_URL`. This frontend cannot override it: payment creation sends only the operation token. Configure the production API to return to `https://www.gettymedicalstores.com/checkout/callback`. A checkout started from localhost needs a separate development API configuration returning to `http://localhost:3000/checkout/callback` if the provider accepts that URL, or to a public HTTPS development tunnel. A production callback cannot access a login or order recovery saved under the localhost browser origin.
+
 ## Form validation
 
 All forms use React Hook Form with a Zod resolver. Use `ValidatedForm` and the `FormInputField`, `FormInput`, `FormSelect`, and `FormTextarea` controls in `components/shared/form/validated-form.tsx` for new forms. The shared form always sets `noValidate`, disables native validation, and displays accessible field errors. Schemas in `lib/form-schemas.ts` normalize text and numbers before submission; authentication and contact forms also reuse their feature schemas.
@@ -63,7 +65,7 @@ The managed-product adapter retains the returned `links.self`, `links.attachment
 
 The admin menu includes Vendors and Customers. Both pages use the same tenant table, search, pagination and account details dialog. The list calls `GET /getty/v1/tenant/tenants` with `type=vendor` for Vendors and `type=customer` for Customers; each page enforces its own type filter and keeps its query cache separate.
 
-Authentication pages in `app/(auth)` share a focused layout outside the marketing layout. Login, signup and verification preserve the shopper’s destination with validated return paths. Cart and checkout in `app/(purchase)` have a compact header and progress indicator. Skeletons cover route transitions and asynchronous data. Device-only wishlist, address preferences and notification settings remain explicitly local conveniences; they are not backend records.
+Authentication pages in `app/(auth)` share a focused layout outside the marketing layout. Login, signup and verification preserve the shopper’s destination with validated return paths. Cart and checkout in `app/(purchase)` have a compact header and progress indicator. Skeletons cover route transitions and asynchronous data. Device-only address preferences and notification settings remain explicitly local conveniences; they are not backend records.
 
 Signing in from the store header opens the account's dashboard: Getty support admins go to `/admin`, vendor accounts to `/supplier`, and consumer accounts to `/customer`. Tenant type is checked alongside profile role so an administrator of a vendor or consumer organisation stays in that organisation's workspace. Protected return links stay within the correct workspace; customers can also resume their shopping or checkout destination. Signed-in visits to the login page redirect automatically. Store navigation shows the account's name, organisation, role, dashboard and order links on desktop and mobile, with sign-out available in the account menu.
 

@@ -40,6 +40,7 @@ const {
   getLiveCategories,
   getLiveProducts,
   getLiveProduct,
+  getRelatedProducts,
   getProductThumbnail,
 } = load("features/products/api/live-catalog.ts")
 const { liveCart, canUseBuyerCart } = load("features/cart/api/live-cart.ts")
@@ -65,6 +66,7 @@ const {
   saveProductOverview,
   submitManagedProductForReview,
   approveManagedProduct,
+  rejectManagedProduct,
 } = load("features/admin/api/product-management.ts")
 const {
   createProductPhotoUpload,
@@ -597,6 +599,39 @@ test("public catalog omits credentials and forwards filters without invented inv
     (e) => e.status === 400
   )
 })
+test("related products use the public in-stock endpoint and catalog pricing", async (t) => {
+  mock(t, (url, options) => {
+    assert.equal(
+      url.pathname,
+      `/getty/ecommerce/catalog/products/${ids[0]}/related`
+    )
+    assert.equal(url.searchParams.get("inStock"), "true")
+    assert.equal(url.searchParams.get("limit"), "6")
+    assert.equal(options.credentials, "omit")
+    assert.equal(options.headers.has("Authorization"), false)
+    return Response.json(
+      envelope([
+        {
+          ...baseProduct,
+          id: ids[2],
+          name: "Nitrile examination gloves",
+          description: "Box of 100",
+          discount: 69,
+          discountFmt: "NGN 69",
+        },
+        baseProduct,
+        { ...baseProduct, id: ids[3], inStock: false },
+      ])
+    )
+  })
+  const products = await getRelatedProducts(ids[0])
+  assert.equal(products.length, 1)
+  assert.equal(products[0].id, ids[2])
+  assert.equal(products[0].price, 69)
+  assert.equal(products[0].compareAtPrice, 100)
+  assert.equal(products[0].stockKnown, false)
+  assert.equal(products[0].slug, `nitrile-examination-gloves-${ids[2]}`)
+})
 test("product card thumbnails load the first public photo without account credentials", async (t) => {
   mock(t, (url, options) => {
     assert.equal(
@@ -666,7 +701,22 @@ test("product details retain variants and use stable live image redirects", asyn
     return Response.json(
       envelope({
         ...baseProduct,
-        detail: null,
+        detail: {
+          manufacturer: null,
+          model: null,
+          origin: "NG",
+          originName: "Nigeria",
+          youtubeEmbed: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+          usage: null,
+          instructions: null,
+          warnings: null,
+          sterile: null,
+          disposable: null,
+          coldchain: null,
+          shelflife: null,
+          warranty: null,
+          dispatch: null,
+        },
         specifications: [],
         variants: [variant],
         taxes: [],
@@ -675,6 +725,11 @@ test("product details retain variants and use stable live image redirects", asyn
     )
   })
   const product = await getLiveProduct(`sterile-gloves-${ids[0]}`)
+  assert.equal(product.detail.originName, "Nigeria")
+  assert.equal(
+    product.detail.youtubeEmbed,
+    "https://www.youtube.com/embed/dQw4w9WgXcQ"
+  )
   assert.equal(product.variants[0].id, ids[2])
   assert.equal(product.variants[0].minimumOrderQuantity, 2)
   assert.equal(
@@ -2473,6 +2528,7 @@ test("product detail writes preserve unknown boolean values and use POST then PA
     manufacturer: "Fixture Medical",
     model: "N100",
     origin: null,
+    youtube: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     usage: "Examination",
     instructions: null,
     warnings: null,
@@ -2486,7 +2542,12 @@ test("product detail writes preserve unknown boolean values and use POST then PA
   await saveProductResource(ids[0], "detail", "POST", fields)
   await saveProductResource(ids[0], "detail", "PATCH", {
     ...fields,
+    youtube: "https://youtu.be/dQw4w9WgXcQ",
     dispatch: 3,
+  })
+  await saveProductResource(ids[0], "detail", "PATCH", {
+    ...fields,
+    youtube: "",
   })
   assert.equal(
     calls[0].url.pathname,
@@ -2499,6 +2560,11 @@ test("product detail writes preserve unknown boolean values and use POST then PA
   })
   assert.equal(calls[2].options.method, "PATCH")
   assert.equal(JSON.parse(calls[2].options.body).dispatch, 3)
+  assert.equal(
+    JSON.parse(calls[2].options.body).youtube,
+    "https://youtu.be/dQw4w9WgXcQ"
+  )
+  assert.equal(JSON.parse(calls[3].options.body).youtube, "")
 })
 
 test("variant management validates quantities and sends packaging/options without changing inventory", async (t) => {
@@ -2633,7 +2699,7 @@ test("vendor draft creation sends the selected status and later submission sends
   await changePortalRecord("products", "POST", { ...fields, status: "draft" })
   await changePortalRecord("products", "POST", { ...fields, status: "pending" })
   await saveProductOverview(ids[0], { ...fields, brand: "" }, "draft")
-  await submitManagedProductForReview({
+  const submittedProduct = {
     product: {
       id: ids[0],
       name: fields.name,
@@ -2649,6 +2715,11 @@ test("vendor draft creation sends the selected status and later submission sends
     specifications: [],
     taxes: [],
     certificates: [],
+  }
+  await submitManagedProductForReview(submittedProduct)
+  await submitManagedProductForReview({
+    ...submittedProduct,
+    product: { ...submittedProduct.product, status: "rejected" },
   })
   assert.deepEqual(calls, [
     {
@@ -2671,6 +2742,11 @@ test("vendor draft creation sends the selected status and later submission sends
       method: "PATCH",
       body: { id: ids[0], ...fields, brand: "", status: "pending" },
     },
+    {
+      url: "/getty/v1/product/products",
+      method: "PATCH",
+      body: { id: ids[0], ...fields, brand: "", status: "pending" },
+    },
   ])
 })
 
@@ -2684,6 +2760,27 @@ test("admin product approval posts the selected product ID to the review endpoin
   })
   session.saveSession({ ...fixtureUser, role: "admin" }, "fixture-access")
   await approveManagedProduct(ids[0])
+})
+
+test("admin product rejection requires a reason and sends it to the review endpoint", async (t) => {
+  const calls = []
+  mock(t, (url, options) => {
+    calls.push({ url, options })
+    return Response.json(envelope("OK"))
+  })
+  session.saveSession({ ...fixtureUser, role: "admin" }, "fixture-access")
+  await assert.rejects(
+    rejectManagedProduct(ids[0], "  "),
+    (error) => error.status === 400
+  )
+  assert.equal(calls.length, 0)
+  await rejectManagedProduct(ids[0], "  Missing specifications.  ")
+  assert.equal(calls[0].url.pathname, "/getty/v1/product/reviews/reject")
+  assert.equal(calls[0].options.method, "POST")
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    id: ids[0],
+    rejection: "Missing specifications.",
+  })
 })
 
 const signedPhotoUpload = (file, name, mime = "image/webp") => ({

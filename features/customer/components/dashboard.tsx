@@ -1,12 +1,10 @@
 "use client"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { Heart, Package, ShoppingCart, Wallet } from "lucide-react"
+import { Package, ShoppingCart, Wallet } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { useCart } from "@/features/cart/hooks/use-cart"
-import { useWishlist } from "@/features/wishlist/hooks/use-wishlist"
 import PageHeading from "@/components/shared/page-heading"
-import EmptyState from "@/components/shared/empty-state"
 import CustomerMetricCard from "@/components/customer/dashboard/customer-metric-card"
 import { formatCurrency } from "@/features/products/utils/format-currency"
 import {
@@ -29,7 +27,6 @@ export default function CustomerDashboard() {
       queryFn: () => getOrders("customer", filters),
       enabled: Boolean(session?.user),
     }),
-    wishlist = useWishlist(),
     { cart, isPending: cartPending, isError: cartError } = useCart()
   const records = orders.data?.items ?? []
   return (
@@ -46,7 +43,7 @@ export default function CustomerDashboard() {
           </Link>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <CustomerMetricCard
           title="Orders this month"
           loading={orders.isPending}
@@ -65,12 +62,6 @@ export default function CustomerDashboard() {
           icon={Wallet}
         />
         <CustomerMetricCard
-          title="Saved products"
-          loading={wishlist.isPending}
-          value={wishlist.products.length}
-          icon={Heart}
-        />
-        <CustomerMetricCard
           title="Items in cart"
           loading={cartPending}
           value={cartError ? "—" : cart.itemCount}
@@ -78,40 +69,21 @@ export default function CustomerDashboard() {
         />
       </div>
       <CustomerOrders embedded />
-      <div className="grid gap-4 md:grid-cols-2">
-        <EmptyState
-          title="Your favourites"
-          description={
-            wishlist.products.length
-              ? `${wishlist.products.length} saved products are waiting for you.`
-              : "Save products you love so you can find them again."
-          }
-          icon={Heart}
-          action={
-            <Link href="/wishlist" className="text-primary font-semibold">
-              Open wishlist →
-            </Link>
-          }
-        />
-        <div className="rounded-xl border bg-white p-6">
-          <h2 className="text-lg font-semibold">Your account</h2>
-          <p className="text-muted-foreground mt-3 text-sm break-all">
-            {session?.user?.email}
-          </p>
-          <div className="mt-6 grid gap-4 text-sm">
-            <Link href="/customer/profile" className="text-primary font-medium">
-              Update your profile →
-            </Link>
-            <Link
-              href="/customer/addresses"
-              className="text-primary font-medium"
-            >
-              Manage delivery addresses →
-            </Link>
-            <Link href="/contact" className="text-primary font-medium">
-              Get help with an order →
-            </Link>
-          </div>
+      <div className="rounded-xl border bg-white p-6">
+        <h2 className="text-lg font-semibold">Your account</h2>
+        <p className="text-muted-foreground mt-3 text-sm break-all">
+          {session?.user?.email}
+        </p>
+        <div className="mt-6 grid gap-4 text-sm">
+          <Link href="/customer/profile" className="text-primary font-medium">
+            Update your profile →
+          </Link>
+          <Link href="/customer/addresses" className="text-primary font-medium">
+            Manage delivery addresses →
+          </Link>
+          <Link href="/contact" className="text-primary font-medium">
+            Get help with an order →
+          </Link>
         </div>
       </div>
     </div>

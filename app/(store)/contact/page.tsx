@@ -27,10 +27,6 @@ const contactItems: ContactItem[] = [
         label: "info@gettymedicalstore.com",
         href: "mailto:info@gettymedicalstore.com",
       },
-      {
-        label: "support@gettymedicalstore.com",
-        href: "mailto:support@gettymedicalstore.com",
-      },
     ],
     icon: Mail,
   },
@@ -41,43 +37,8 @@ const contactItems: ContactItem[] = [
         label: "+234 90 9858 5775",
         href: "tel:+2349098585775",
       },
-      {
-        label: "+234 90 9854 5000",
-        href: "tel:+2349098545000",
-      },
-      {
-        label: "+234 80 3358 5775",
-        href: "tel:+2348033585775",
-      },
     ],
     icon: Phone,
-  },
-  {
-    title: "Office",
-    values: [
-      {
-        label: "123 Road 45, Jabi Axis, Headquarters",
-      },
-      {
-        label: "123 Road 45, Maitama Axis, Branch",
-      },
-    ],
-    icon: MapPin,
-  },
-  {
-    title: "Business Hours",
-    values: [
-      {
-        label: "Monday - Friday, 9:00 AM - 5:00 PM",
-      },
-      {
-        label: "Saturday: 10:00 AM - 4:00 PM",
-      },
-      {
-        label: "Sunday: Closed",
-      },
-    ],
-    icon: Clock3,
   },
 ]
 export default function ContactPage() {

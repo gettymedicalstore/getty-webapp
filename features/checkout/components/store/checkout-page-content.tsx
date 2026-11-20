@@ -158,7 +158,6 @@ function CheckoutStatus() {
   } | null>(null)
   const manualSelection = useRef(false)
   const [recovery, setRecovery] = useState(() => readRecovery(user.id))
-  const [order, setOrder] = useState<string>()
   const [preview, setPreview] = useState<{
     data: CheckoutPreview
     signature: string
@@ -175,6 +174,7 @@ function CheckoutStatus() {
     notes: "",
   })
   const [busy, setBusy] = useState(false)
+  const [recoveringSavedOrder, setRecoveringSavedOrder] = useState(false)
   const [defaultUpdating, setDefaultUpdating] = useState(false)
   const [error, setError] = useState("")
   const [addressSaveWarning, setAddressSaveWarning] = useState("")
@@ -392,6 +392,8 @@ function CheckoutStatus() {
   async function submit(saved?: CheckoutCommand) {
     if (sending.current || (!saved && !validPreview)) return
     sending.current = true
+    let navigating = false
+    setRecoveringSavedOrder(Boolean(saved))
     setBusy(true)
     setError("")
     try {
@@ -406,7 +408,11 @@ function CheckoutStatus() {
       const result = await placeOrder(command)
       rememberOrder(user.id, result.id)
       if (readSession().user?.id !== user.id) return
-      void client.invalidateQueries({ queryKey: ["cart", user.id] })
+      // Mark the bag stale without replacing the checkout view before handoff.
+      void client.invalidateQueries({
+        queryKey: ["cart", user.id],
+        refetchType: "none",
+      })
       void client.invalidateQueries({ queryKey: ["orders"] })
       let continuePayment = Boolean(blockingCharge(result))
       let immediateLink: string | null = null
@@ -425,12 +431,13 @@ function CheckoutStatus() {
       if (readSession().user?.id !== user.id) return
       if (immediateLink) {
         window.location.assign(immediateLink)
+        navigating = true
         return
       }
-      setOrder(result.id)
-      router.push(
+      router.replace(
         `/checkout/payment?order=${encodeURIComponent(result.id)}${continuePayment ? "&continue=1" : ""}`
       )
+      navigating = true
     } catch (e) {
       const definitive =
         e instanceof GettyApiError &&
@@ -455,19 +462,13 @@ function CheckoutStatus() {
       }
       setError(message)
     } finally {
-      sending.current = false
-      setBusy(false)
+      if (!navigating) {
+        sending.current = false
+        setBusy(false)
+      }
     }
   }
-  if (order)
-    return (
-      <div className="site-container py-8 sm:py-12">
-        <div className="mx-auto max-w-2xl">
-          <PaymentPanel orderId={order} autoContinue />
-        </div>
-      </div>
-    )
-  if (recovery.command)
+  if (recovery.command && (!busy || recoveringSavedOrder))
     return (
       <div className="site-container py-12">
         <section className="mx-auto max-w-2xl rounded-2xl border bg-white p-6 sm:p-8">

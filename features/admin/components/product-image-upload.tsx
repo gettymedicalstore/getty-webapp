@@ -45,9 +45,11 @@ type UploadMode = "single" | "multiple"
 export default function ProductImageUpload({
   product,
   photosLink,
+  canManage = true,
 }: {
   product: string
   photosLink?: string
+  canManage?: boolean
 }) {
   const client = useQueryClient()
   const [mode, setMode] = useState<UploadMode>("single")
@@ -100,7 +102,7 @@ export default function ProductImageUpload({
   }, [])
 
   function showDialog(mode: UploadMode, event: MouseEvent<HTMLButtonElement>) {
-    if (inFlight.current) return
+    if (!canManage || inFlight.current) return
     returnFocus.current = event.currentTarget
     setMode(mode)
     setError("")
@@ -113,6 +115,7 @@ export default function ProductImageUpload({
   }
 
   async function prepare(image: SelectedImage) {
+    if (!canManage) return
     const generation = preparationGeneration.current
     setSelected((current) =>
       current.map((item) =>
@@ -156,7 +159,7 @@ export default function ProductImageUpload({
   }
 
   function select(files: FileList | null) {
-    if (!files || inFlight.current) return
+    if (!canManage || !files || inFlight.current) return
     const candidates = Array.from(files)
     if (mode === "single" && candidates.length > 1) {
       setError("Choose only one image, or use Upload multiple images.")
@@ -229,7 +232,7 @@ export default function ProductImageUpload({
   }
 
   async function upload({ images }: z.infer<typeof productImagesFormSchema>) {
-    if (!ready || inFlight.current) return
+    if (!canManage || !ready || inFlight.current) return
     inFlight.current = true
     setBusy(true)
     setError("")
@@ -276,17 +279,11 @@ export default function ProductImageUpload({
 
   return (
     <section className="space-y-5" aria-label="Product photos">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-[#253c2e]">
-            Photos
-          </h2>
-          <p className="mt-1 text-sm text-[#5e6f63]">
-            Upload clear images for this product’s catalogue listing.
-          </p>
+      {canManage && (
+        <div className="flex justify-end">
+          <UploadButtons onSelect={showDialog} disabled={busy} />
         </div>
-        <UploadButtons onSelect={showDialog} disabled={busy} />
-      </div>
+      )}
       <div className="rounded-xl border border-[#dfe8e1] bg-white p-5 sm:p-7">
         {photos.isError && (
           <div role="alert" className="mb-5 rounded-lg bg-red-50 p-4">
@@ -357,14 +354,16 @@ export default function ProductImageUpload({
               <Images aria-hidden className="size-7" />
             </div>
             <h3 className="mt-4 font-semibold text-[#344d3d]">No photos yet</h3>
-            <p className="mt-2 text-sm text-[#5e6f63]">
-              Use the upload buttons above to add the first product image.
-            </p>
+            {canManage && (
+              <p className="mt-2 text-sm text-[#5e6f63]">
+                Use the upload buttons above to add the first product image.
+              </p>
+            )}
           </div>
         ) : null}
       </div>
       <Dialog
-        open={open}
+        open={open && canManage}
         onOpenChange={(next) => {
           if (!next) closeDialog()
         }}
@@ -404,6 +403,7 @@ export default function ProductImageUpload({
                 name={imagesField.name}
                 onBlur={imagesField.onBlur}
                 aria-invalid={Boolean(form.formState.errors.images)}
+                aria-describedby="product-image-guidance"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 multiple={mode === "multiple"}
@@ -419,6 +419,33 @@ export default function ProductImageUpload({
                   event.currentTarget.value = ""
                 }}
               />
+              <div
+                id="product-image-guidance"
+                className="rounded-lg border border-[#dce9df] bg-[#f5faf6] px-4 py-3 text-sm text-[#435b49]"
+              >
+                <p className="font-semibold text-[#244b34]">
+                  For a clear image on product cards
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  <li>
+                    Use a square photo (1:1). Aim for 1200 × 1200 pixels; 800 ×
+                    800 pixels or larger works well.
+                  </li>
+                  <li>
+                    Show the actual product or its packaging, centered and fully
+                    visible, with some space around the edges.
+                  </li>
+                  <li>
+                    Choose a plain white or light background and even lighting.
+                    Avoid collages, added text and watermarks.
+                  </li>
+                  <li>
+                    Use JPG, PNG or WebP. For faster loading, aim to keep each
+                    file under 5 MB. Extra photos can show other angles or the
+                    label.
+                  </li>
+                </ul>
+              </div>
               <div
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {

@@ -90,12 +90,11 @@ test("customer and vendor pages link to their own sections", () => {
     if (kind === "vendors") {
       assert.ok(html.includes('href="/admin/vendors/customer-id?tab=products"'))
       assert.equal(html.includes("Back to vendors"), false)
-      assert.equal(html.includes("Refresh"), false)
     } else {
       assert.ok(html.includes('href="/admin/customers"'))
       assert.ok(html.includes("Back to customers"))
-      assert.ok(html.includes("Refresh"))
     }
+    assert.equal(html.includes("Refresh"), false)
     assert.equal(html.includes('role="dialog"'), false)
   }
 })

@@ -14,7 +14,6 @@ const links = [
   { label: "Home", href: "/" },
   { label: "Shop all products", href: "/products" },
   { label: "Categories", href: "/categories" },
-  { label: "Wishlist", href: "/wishlist" },
   { label: "Contact us", href: "/contact" },
 ]
 export default function MobileNavigation({
@@ -56,17 +55,23 @@ export default function MobileNavigation({
           </Link>
         ))}
         <Link
-          href={user ? `${accountHome(user.role)}/orders` : "/track-order"}
+          href="/track-order"
           onClick={onNavigate}
           className="hover:bg-muted flex min-h-13 items-center justify-between rounded-xl px-4 text-base font-medium text-[#425d4c]"
         >
-          {user
-            ? user.role === "customer"
-              ? "My orders"
-              : "Manage orders"
-            : "Track order"}
+          Track order
           <ChevronRight className="size-5 text-[#91a096]" />
         </Link>
+        {user && (
+          <Link
+            href={`${accountHome(user.role)}/orders`}
+            onClick={onNavigate}
+            className="hover:bg-muted flex min-h-13 items-center justify-between rounded-xl px-4 text-base font-medium text-[#425d4c]"
+          >
+            {user.role === "customer" ? "My orders" : "Manage orders"}
+            <ChevronRight className="size-5 text-[#91a096]" />
+          </Link>
+        )}
       </div>
       <div className="mt-5 grid gap-3 border-t pt-5">
         {session.isPending ? (

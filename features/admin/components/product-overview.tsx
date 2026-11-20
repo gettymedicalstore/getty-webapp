@@ -2,7 +2,6 @@
 import {
   ValidatedForm,
   FormInputField,
-  FormSelect,
   FormTextarea,
 } from "@/components/shared/form/validated-form"
 import { productOverviewFormSchema } from "@/lib/form-schemas"
@@ -13,13 +12,13 @@ import { useQuery } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import PriceInput from "@/components/shared/form/price-input"
+import ProductCategoryPicker from "./product-category-picker"
 import { portalRecords } from "../api/portal"
 import {
   saveProductOverview,
   type ManagedProduct,
 } from "../api/product-management"
 import {
-  fieldClass,
   FormActions,
   FormCard,
   FormError,
@@ -31,9 +30,11 @@ import {
 export default function ProductOverview({
   data,
   currency,
+  canManage = true,
 }: {
   data: ManagedProduct
   currency: string
+  canManage?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const product = data.product
@@ -45,6 +46,7 @@ export default function ProductOverview({
     enabled: editing,
   })
   async function submit(values: z.output<typeof productOverviewFormSchema>) {
+    if (!canManage) return
     await mutation.run(
       () =>
         saveProductOverview(
@@ -64,7 +66,7 @@ export default function ProductOverview({
       () => setEditing(false)
     )
   }
-  if (editing)
+  if (editing && canManage)
     return (
       <FormCard
         title="Edit product"
@@ -90,30 +92,14 @@ export default function ProductOverview({
               label="Brand (optional)"
               defaultValue={valueText(product.brand)}
             />
-            <label className="block space-y-2 text-sm font-medium text-[#414651]">
-              <span>Category</span>
-              <FormSelect
-                className={fieldClass}
-                name="category"
-                required
-                disabled={!categories.isSuccess}
-                defaultValue={valueText(
-                  product.category,
-                  data.category?.id ?? ""
-                )}
-              >
-                <option value="" disabled>
-                  {categories.isPending
-                    ? "Loading categories…"
-                    : "Select a category"}
-                </option>
-                {categories.data?.records.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {valueText(category.categoryPath, valueText(category.name))}
-                  </option>
-                ))}
-              </FormSelect>
-            </label>
+            <ProductCategoryPicker
+              records={categories.data?.records}
+              disabled={!categories.isSuccess}
+              defaultValue={valueText(
+                product.category,
+                data.category?.id ?? ""
+              )}
+            />
             {categories.isError && (
               <div role="alert" className="text-sm text-red-700">
                 Categories couldn’t be loaded.{" "}
@@ -169,17 +155,19 @@ export default function ProductOverview({
         <h2 className="text-lg font-semibold text-[#283c30]">
           Product overview
         </h2>
-        <Button
-          variant="outline"
-          className="h-11 rounded-lg text-sm"
-          onClick={() => {
-            mutation.setError("")
-            setEditing(true)
-          }}
-        >
-          <Pencil aria-hidden className="size-4" />
-          Edit product
-        </Button>
+        {canManage && (
+          <Button
+            variant="outline"
+            className="h-11 rounded-lg text-sm"
+            onClick={() => {
+              mutation.setError("")
+              setEditing(true)
+            }}
+          >
+            <Pencil aria-hidden className="size-4" />
+            Edit product
+          </Button>
+        )}
       </div>
       <div className="space-y-7 p-5 sm:p-7">
         <div>

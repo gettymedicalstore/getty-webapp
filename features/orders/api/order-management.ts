@@ -121,6 +121,7 @@ export const orderLineSchema = z.object({
   shipping: money.optional(),
   commission: money.optional(),
   status: z.enum(itemStatuses),
+  canReview: z.boolean().optional(),
   supply: supplySchema.optional(),
   version: z.number().int().positive(),
   tracking: z

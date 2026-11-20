@@ -13,8 +13,6 @@ import { Button } from "@/components/ui/button"
 import RecordTable from "@/components/shared/record-table"
 import ContentError from "@/components/shared/content-error"
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
-import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
-import { isOwnProduct } from "../api/product-ownership"
 import {
   getProductResource,
   saveProductResource,
@@ -34,30 +32,13 @@ import {
 
 export default function ProductSpecifications({
   product,
-  productName,
   readScope = "tenant",
+  canManage = true,
 }: {
   product: string
-  productName: string
   readScope?: ProductReadScope
+  canManage?: boolean
 }) {
-  const session = useAuthSession()
-  const user = session.data?.user
-  const ownership = useQuery({
-    queryKey: [
-      "portal",
-      "product-ownership",
-      user?.id,
-      user?.tenant,
-      product,
-      productName,
-    ],
-    queryFn: () => isOwnProduct(product, productName),
-    enabled: user?.role === "admin",
-  })
-  const canManage =
-    user?.role === "supplier" ||
-    (user?.role === "admin" && ownership.isSuccess && ownership.data === true)
   const query = useQuery({
     queryKey: ["managed-product", product, readScope, "specifications"],
     queryFn: () => getProductResource(product, "specifications", readScope),
@@ -151,8 +132,6 @@ export default function ProductSpecifications({
   return (
     <section>
       <ProductPanelHeading
-        title="Specifications"
-        description="Product attributes that help customers choose the right supplies."
         action={
           canManage && (
             <Button
@@ -168,28 +147,6 @@ export default function ProductSpecifications({
           )
         }
       />
-      {!canManage && (
-        <div
-          className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-[#e1e8e3] bg-[#f6f9f7] px-4 py-3 text-sm text-[#506858]"
-          role="status"
-        >
-          {session.isPending || (user?.role === "admin" && ownership.isPending)
-            ? "Checking whether you can manage these specifications…"
-            : ownership.isError
-              ? "Specifications are read-only while product ownership cannot be verified."
-              : "Specifications are read-only. You can manage specifications for your own products."}
-          {ownership.isError && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={ownership.isFetching}
-              onClick={() => void ownership.refetch()}
-            >
-              Retry ownership check
-            </Button>
-          )}
-        </div>
-      )}
       {query.isPending ? (
         <TableSkeleton />
       ) : query.isError ? (

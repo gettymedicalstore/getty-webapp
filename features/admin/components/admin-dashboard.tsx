@@ -7,7 +7,6 @@ import {
   ArrowUpRight,
   FolderTree,
   Package,
-  RotateCcw,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react"
 import ContentError from "@/components/shared/content-error"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getAdminDashboard, type AdminDashboardData } from "../api/dashboard"
 
@@ -396,24 +394,9 @@ export default function AdminDashboard() {
   })
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm leading-6 text-[#5e6f63]">
-          An overview of your accounts, catalogue and orders.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={query.isFetching}
-          onClick={() => void query.refetch()}
-          aria-busy={query.isFetching}
-        >
-          <RotateCcw
-            aria-hidden
-            className={cn("size-4", query.isFetching && "animate-spin")}
-          />
-          Refresh
-        </Button>
-      </div>
+      <p className="text-sm leading-6 text-[#5e6f63]">
+        An overview of your accounts, catalogue and orders.
+      </p>
       {query.isPending ? (
         <div
           role="status"

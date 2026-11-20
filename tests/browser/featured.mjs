@@ -295,15 +295,20 @@ try {
   await dialog.waitFor({ state: "hidden" })
   assert.equal(calls.filter((c) => c.method === "DELETE").length, 1)
   await page.goto(base, { waitUntil: "networkidle" })
-  const hero = page.getByRole("complementary", { name: "Featured products" })
-  await hero.getByText("Comfort for everyday care").waitFor()
+  const hero = page.getByRole("complementary", { name: "Featured product" })
+  await hero.getByRole("link", { name: /^View / }).waitFor()
+  assert.equal(await hero.getByText("Explore product").count(), 0)
   assert.ok(
     (await hero.locator("img").getAttribute("src")).includes(
       `/getty/ecommerce/featured/${advert}/photo`
     )
   )
-  await hero.getByRole("button", { name: "Next featured product" }).click()
-  await hero.getByText("Supplies for your practice").waitFor()
+  assert.equal(await hero.getByText("Comfort for everyday care").count(), 0)
+  assert.equal(await hero.getByText("Supplies for your practice").count(), 0)
+  assert.equal(
+    await hero.getByRole("button", { name: "Next featured product" }).count(),
+    0
+  )
   assert.equal(await page.getByText("EXPIRED ADVERT").count(), 0)
   await inspect("featured-storefront")
   assert.deepEqual(errors, [])

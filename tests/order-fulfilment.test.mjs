@@ -638,16 +638,66 @@ test("fulfilment current-day range uses date-only bounds", () => {
   )
 })
 
-test("printed-code lookup uses authenticated buyer or supplier scope", async (t) => {
+test("public tracking normalizes the order code and omits credentials", async (t) => {
   const calls = []
-  t.mock.method(data, "apiData", async (path) => {
-    calls.push(path)
-    return vendor
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    calls.push({ path: new URL(url).pathname, options })
+    return new Response(
+      JSON.stringify({
+        status: 200,
+        success: true,
+        data: {
+          orderCode: "2610-K7P4",
+          status: "processing",
+          fulfilment: "ready",
+          placed: "2026-11-19T10:00:00+01:00",
+          estimatedDelivery: null,
+          timeline: [
+            { status: "placed", at: "2026-11-19T10:00:00+01:00" },
+            { status: "ready", at: "2026-11-19T12:00:00+01:00" },
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    )
   })
-  await trackOrder({ orderNumber: " 2610-K7P4 " }, "customer")
-  await trackOrder({ orderNumber: "2610-K7P4" }, "vendor")
+  const result = await trackOrder({ orderNumber: " 2610-k7p4 " })
+  assert.equal(result.fulfilment, "ready")
+  assert.deepEqual(
+    result.timeline.map((entry) => entry.status),
+    ["placed", "ready"]
+  )
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].path, "/getty/ecommerce/orders/tracking/2610-K7P4")
+  assert.equal(calls[0].options.credentials, "omit")
+  assert.equal(calls[0].options.cache, "no-store")
+  await assert.rejects(trackOrder({ orderNumber: "bad" }))
+  assert.equal(calls.length, 1)
+})
+
+test("public tracking observes rate-limit headers and never refreshes on 401", async (t) => {
+  const calls = []
+  t.mock.method(globalThis, "fetch", async (url) => {
+    calls.push(new URL(url).pathname)
+    return calls.length === 1
+      ? new Response(JSON.stringify({ retryAfterSeconds: 12 }), {
+          status: 429,
+          headers: { "Retry-After": "87" },
+        })
+      : new Response(JSON.stringify({ status: 401, success: false }), {
+          status: 401,
+        })
+  })
+  await assert.rejects(
+    trackOrder({ orderNumber: "2611-K7P4" }),
+    (error) => error.status === 429 && error.retryAfterSeconds === 87
+  )
+  await assert.rejects(
+    trackOrder({ orderNumber: "2611-K7P4" }),
+    (error) => error.status === 401
+  )
   assert.deepEqual(calls, [
-    "/getty/v1/order/code/2610-K7P4",
-    "/getty/v1/order/vendor/code/2610-K7P4",
+    "/getty/ecommerce/orders/tracking/2611-K7P4",
+    "/getty/ecommerce/orders/tracking/2611-K7P4",
   ])
 })

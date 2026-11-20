@@ -181,6 +181,7 @@ test("order details retain the supplied inclusive tax breakdown and optional fie
     items: [
       {
         ...line,
+        canReview: true,
         sku: "SKU-11111111111141118111000000000006",
         options: {},
         unit: "piece",
@@ -228,6 +229,7 @@ test("order details retain the supplied inclusive tax breakdown and optional fie
     assert.deepEqual(parsed, supplied)
     assert.equal(parsed.tax, 27906.9767)
     assert.equal(parsed.items[0].taxes[0].amount, 27906.9767)
+    assert.equal(parsed.items[0].canReview, true)
     assert.equal(parsed.total, parsed.subtotal + parsed.shipping)
     assert.notEqual(
       parsed.total,

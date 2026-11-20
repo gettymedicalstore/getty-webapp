@@ -32,6 +32,7 @@ const profiles = require("../features/admin/api/team-profiles.ts")
 const onboarding = require("../features/auth/api/onboarding.ts")
 const accounts = require("../features/admin/api/accounts.ts")
 const catalog = require("../features/products/api/live-catalog.ts")
+const ratings = require("../features/products/api/product-ratings.ts")
 const reset = require("../features/auth/api/password-reset.ts")
 const id = "11111111-1111-4111-8111-111111111111"
 const second = "22222222-2222-4222-8222-222222222222"
@@ -195,7 +196,16 @@ test("public reviews use published-only visibility and validate pagination", asy
       showAll: "false",
     })
     return envelope({
-      records: [],
+      records: [
+        {
+          id: second,
+          score: 4,
+          title: null,
+          comment: "Useful product",
+          date: "2026-11-19T15:30:00+01:00",
+          verified: false,
+        },
+      ],
       cursor: 42,
       nextCursor: 0,
       previousCursor: 0,
@@ -203,20 +213,72 @@ test("public reviews use published-only visibility and validate pagination", asy
       isPrevious: false,
     })
   })
-  assert.equal(
-    (
-      await catalog.getProductReviews(id, {
-        cursor: 42,
-        navigation: "previous",
-      })
-    ).isNext,
-    false
-  )
+  const page = await catalog.getProductReviews(id, {
+    cursor: 42,
+    navigation: "previous",
+  })
+  assert.equal(page.isNext, false)
+  assert.equal(page.records[0].verified, false)
   t.mock.method(client, "apiRequest", async () => envelope({ records: [] }))
   await assert.rejects(
     catalog.getProductReviews(id, { cursor: 0, navigation: "next" }),
     /reviews response is incomplete/
   )
+})
+
+test("a purchased item rating posts the product and order item to the authenticated endpoint", async (t) => {
+  const calls = []
+  t.mock.method(data, "apiData", async (path, options, access) => {
+    calls.push({
+      path,
+      method: options.method,
+      body: JSON.parse(options.body),
+      access,
+    })
+    return { id: second }
+  })
+  assert.deepEqual(
+    await ratings.submitProductRating({
+      product: id,
+      item: second,
+      score: 5,
+      title: " Good quality ",
+      comment: " Well packaged and as described. ",
+    }),
+    { id: second }
+  )
+  assert.deepEqual(calls, [
+    {
+      path: "/getty/v1/product/ratings",
+      method: "POST",
+      body: {
+        product: id,
+        item: second,
+        score: 5,
+        title: "Good quality",
+        comment: "Well packaged and as described.",
+      },
+      access: "authenticated",
+    },
+  ])
+  await ratings.submitProductRating({
+    product: id,
+    item: second,
+    score: 4,
+    title: "  ",
+    comment: "",
+  })
+  assert.deepEqual(calls[1].body, { product: id, item: second, score: 4 })
+  await assert.rejects(() =>
+    ratings.submitProductRating({
+      product: id,
+      item: second,
+      score: 6,
+      title: "Good quality",
+      comment: "Well packaged and as described.",
+    })
+  )
+  assert.equal(calls.length, 2)
 })
 
 test("password reset resends the current reference and retains the replacement expiry", async (t) => {

@@ -51,7 +51,7 @@ const product = "01a11273-ddcd-7dc4-b84e-fe1c822c3b1c"
 const file = "01a11600-c433-7000-8000-100000056e27"
 const photosLink = `/getty/ecommerce/catalog/products/${product}/photos`
 
-test("featured hero uses scheduled adverts, dedicated images and catalogue pricing", () => {
+test("featured hero links its scheduled image without showing price or a separate product button", () => {
   const client = new QueryClient()
   const url = `https://api.gettymedicalstores.com/getty/ecommerce/featured/${file}/photo`
   client.setQueryData(
@@ -90,13 +90,18 @@ test("featured hero uses scheduled adverts, dedicated images and catalogue prici
   assert.ok(html.includes("Medical bed"))
   assert.ok(html.includes(`src="${url}"`))
   assert.ok(html.includes('href="/products/medical-bed"'))
-  assert.ok(html.includes("Comfort for everyday care"))
-  assert.ok(html.includes('aria-label="Next featured product"'))
-  assert.ok(html.includes("Save"))
+  assert.ok(html.includes('aria-label="Featured product"'))
+  assert.ok(html.includes('aria-label="View Medical bed"'))
+  assert.equal(html.includes('aria-label="Pause featured products"'), false)
+  assert.equal(html.includes("Explore product"), false)
+  assert.equal(html.includes("₦800.00"), false)
+  assert.equal(html.includes("Comfort for everyday care"), false)
+  assert.equal(html.includes("Equipment"), false)
+  assert.equal(html.includes('aria-label="Next featured product"'), false)
   client.setQueryData(["featured", "public", 20], [])
   const empty = renderHero()
   assert.ok(empty.includes("Shop all products"))
-  assert.equal(empty.includes('aria-label="Featured products"'), false)
+  assert.equal(empty.includes('aria-label="Featured product"'), false)
   assert.equal(empty.includes('aria-label="Next featured product"'), false)
   client.clear()
 })

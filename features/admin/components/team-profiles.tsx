@@ -32,11 +32,12 @@ import CreateAccount from "./create-account"
 import ProfileRoleField from "./profile-role-field"
 
 export default function TeamProfiles() {
-  const { data: session } = useAuthSession()
+  const { data: session, isPending: sessionPending } = useAuthSession()
   const user = session?.user
   const allowed = Boolean(
     user && ["admin", "superadmin"].includes(user.profileRole ?? "")
   )
+  const canManage = user?.profileRole === "admin"
   const client = useQueryClient()
   const [filter, setFilter] = useState({
     search: "",
@@ -61,10 +62,18 @@ export default function TeamProfiles() {
     enabled: allowed && selected?.action === "edit",
     staleTime: 5 * 60 * 1000,
   })
-  if (!allowed) return null
+  if (sessionPending)
+    return <p className="text-muted-foreground text-sm">Loading users…</p>
+  if (!allowed)
+    return (
+      <ContentError
+        title="User management is unavailable"
+        description="Only authorised administrators can view users."
+      />
+    )
 
   async function save(values?: Record<string, unknown>) {
-    if (!selected || busy || !allowed) return
+    if (!selected || busy || !canManage) return
     if (selected.action === "edit" && !roles.data) return
     setBusy(true)
     setError("")
@@ -93,6 +102,7 @@ export default function TeamProfiles() {
     action: "edit" | "delete",
     element: HTMLButtonElement
   ) {
+    if (!canManage) return
     trigger.current = element
     setError("")
     setSelected({ profile, action })
@@ -102,7 +112,7 @@ export default function TeamProfiles() {
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
       <p className="text-muted-foreground text-sm">
         {query.data?.totalRecords ?? 0}{" "}
-        {query.data?.totalRecords === 1 ? "team member" : "team members"}
+        {query.data?.totalRecords === 1 ? "user" : "users"}
       </p>
       <div className="flex gap-2">
         <Button
@@ -140,7 +150,7 @@ export default function TeamProfiles() {
   const columns: ColumnDef<TeamProfile, unknown>[] = [
     {
       accessorKey: "name",
-      header: "Team member",
+      header: "User",
       enableSorting: false,
       cell: ({ row }) => (
         <div className="max-w-64">
@@ -186,7 +196,9 @@ export default function TeamProfiles() {
         </div>
       ),
     },
-    {
+  ]
+  if (canManage)
+    columns.push({
       id: "actions",
       header: "Actions",
       enableSorting: false,
@@ -207,19 +219,26 @@ export default function TeamProfiles() {
           ))}
         </div>
       ),
-    },
-  ]
+    })
 
   return (
     <section
       className="min-w-0 space-y-5"
-      aria-labelledby="team-profiles-heading"
+      aria-labelledby="user-management-heading"
     >
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <p className="text-muted-foreground mt-1 text-sm">
-          Manage the people who have access to your organisation’s workspace.
-        </p>
-        <CreateAccount kind="profile" />
+        <div>
+          <h2
+            id="user-management-heading"
+            className="text-xl font-semibold text-[#263e30]"
+          >
+            User management
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Manage the people who have access to your organisation’s workspace.
+          </p>
+        </div>
+        {canManage && <CreateAccount kind="profile" />}
       </div>
       <ValidatedForm
         schema={searchSchema}
@@ -236,7 +255,7 @@ export default function TeamProfiles() {
       >
         <FormInputField
           name="search"
-          label="Search team members"
+          label="Search users"
           type="search"
           placeholder="Name, email or phone"
           hint="Enter at least four characters to filter the list."
@@ -244,7 +263,7 @@ export default function TeamProfiles() {
       </ValidatedForm>
       {query.isError ? (
         <ContentError
-          title="We couldn’t load your team"
+          title="We couldn’t load your users"
           description={query.error.message}
           onRetry={() => void query.refetch()}
         />
@@ -253,7 +272,7 @@ export default function TeamProfiles() {
           <div className="space-y-3 md:hidden">
             {query.isPending ? (
               <p className="rounded-xl border bg-white p-5 text-sm text-[#5e6f63]">
-                Loading team members…
+                Loading users…
               </p>
             ) : query.data?.records.length ? (
               query.data.records.map((profile) => (
@@ -305,28 +324,32 @@ export default function TeamProfiles() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2 border-t border-[#eff2ef] px-3 py-2">
-                    {(["edit", "delete"] as const).map((action) => (
-                      <Button
-                        key={action}
-                        type="button"
-                        variant="ghost"
-                        className={
-                          action === "delete" ? "text-red-700" : "text-primary"
-                        }
-                        onClick={(event) =>
-                          selectProfile(profile, action, event.currentTarget)
-                        }
-                      >
-                        {action === "edit" ? "Edit" : "Delete"}
-                      </Button>
-                    ))}
-                  </div>
+                  {canManage && (
+                    <div className="flex gap-2 border-t border-[#eff2ef] px-3 py-2">
+                      {(["edit", "delete"] as const).map((action) => (
+                        <Button
+                          key={action}
+                          type="button"
+                          variant="ghost"
+                          className={
+                            action === "delete"
+                              ? "text-red-700"
+                              : "text-primary"
+                          }
+                          onClick={(event) =>
+                            selectProfile(profile, action, event.currentTarget)
+                          }
+                        >
+                          {action === "edit" ? "Edit" : "Delete"}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </article>
               ))
             ) : (
               <p className="rounded-xl border bg-white p-5 text-sm text-[#5e6f63]">
-                No team profiles match your search.
+                No users match your search.
               </p>
             )}
             <div className="rounded-xl border border-[#e3e8e5] bg-white">
@@ -335,7 +358,7 @@ export default function TeamProfiles() {
           </div>
           <div className="hidden md:block">
             <AdminDataTable
-              label="Team profiles"
+              label="Users"
               columns={columns}
               data={query.data?.records ?? []}
               total={query.data?.totalRecords ?? 0}
@@ -343,7 +366,7 @@ export default function TeamProfiles() {
               pagination={{ pageIndex: 0, pageSize: 20 }}
               onPaginationChange={() => {}}
               loading={query.isPending}
-              emptyState={<p>No team profiles match your search.</p>}
+              emptyState={<p>No users match your search.</p>}
               paginationControls={paginationControls}
             />
           </div>

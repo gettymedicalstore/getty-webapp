@@ -224,8 +224,12 @@ try {
       .count(),
     0
   )
-  run.setOrder({ status: "confirmed" })
+  run.setOrder({ status: "pending" })
   await page.reload()
+  await page
+    .getByRole("heading", { name: "Payment received · checking your order" })
+    .waitFor()
+  run.setOrder({ status: "confirmed" })
   await page.getByRole("heading", { name: "Your order is confirmed" }).waitFor()
   assert.equal(calls.filter((c) => c.path.endsWith("/payments")).length, 1)
   assert.deepEqual(run.errors, [])

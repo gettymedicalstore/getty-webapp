@@ -76,13 +76,18 @@ try {
       }
     )
     const page = await context.newPage()
-    await page.goto(`${base}/${role}/settings`)
-    await page.getByRole("tab", { name: "Organisation team" }).click()
-    await page.getByRole("heading", { name: "Organisation team" }).waitFor()
+    await page.goto(
+      role === "admin" ? `${base}/admin/users` : `${base}/${role}/settings`
+    )
+    if (role === "admin") {
+      await page.getByRole("heading", { name: "User management" }).waitFor()
+      await page.getByRole("link", { name: "Users" }).waitFor()
+    } else {
+      await page.getByRole("tab", { name: "Organisation team" }).click()
+      await page.getByRole("heading", { name: "Organisation team" }).waitFor()
+    }
     await page.getByRole("cell", { name: /Ada Okafor/ }).waitFor()
-    await page
-      .getByRole("button", { name: "Add team profile", exact: true })
-      .click()
+    await page.getByRole("button", { name: "Add user", exact: true }).click()
     let dialog = page.getByRole("dialog")
     await dialog
       .getByRole("textbox", { name: "Full name", exact: true })
@@ -94,9 +99,7 @@ try {
     await dialog
       .getByRole("button", { name: "Create account", exact: true })
       .click()
-    await dialog
-      .getByRole("heading", { name: "Team profile created" })
-      .waitFor()
+    await dialog.getByRole("heading", { name: "User created" }).waitFor()
     await dialog.getByRole("button", { name: "Done", exact: true }).click()
     assert.equal(writes[0].method, "POST")
     assert.equal(writes[0].body.role, "user")
@@ -126,7 +129,7 @@ try {
         const overflow = await page.evaluate(
           () => document.documentElement.scrollWidth - window.innerWidth
         )
-        assert.ok(overflow <= 1, `Settings overflow at ${width}: ${overflow}px`)
+        assert.ok(overflow <= 1, `Users overflow at ${width}: ${overflow}px`)
       }
       await page.setViewportSize({ width: 390, height: 1000 })
       await page.getByRole("button", { name: "Edit", exact: true }).click()

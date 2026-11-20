@@ -34,7 +34,7 @@ Automated accessibility checks supplement visual and keyboard review; they do no
 - Made the shared store header and system logo fit narrow screens.
 - Fixed signup grid sizing, shared textarea styling and scrollable dialogs.
 - Improved text contrast and accessible names; added a skip link and keyboard access to the testimonial rail.
-- Prevented streamed category and wishlist hydration mismatches when shared query caches populate early.
+- Prevented streamed category hydration mismatches when shared query caches populate early.
 - Removed duplicate homepage product sections and replaced the unavailable newsletter submission with a working support link.
 - Shortened the mobile hero and adapted carousel controls for narrow screens.
 - Stopped displaying unknown category counts as zero.

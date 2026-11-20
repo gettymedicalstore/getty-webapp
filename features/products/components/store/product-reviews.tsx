@@ -3,8 +3,12 @@ import { LoadingRegion } from "@/components/shared/loading-skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import Link from "next/link"
+import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
+import { Role } from "@/lib/auth/roles"
 import { getProductReviews } from "../../api/live-catalog"
 export default function ProductReviews({ product }: { product: string }) {
+  const { data: session } = useAuthSession()
   const [page, setPage] = useState<{
     cursor: number
     navigation: "next" | "previous"
@@ -15,7 +19,17 @@ export default function ProductReviews({ product }: { product: string }) {
   })
   return (
     <section className="mt-6 rounded-xl bg-white p-5">
-      <h2 className="text-lg font-semibold">Verified purchase reviews</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Product reviews</h2>
+        {session?.user?.role === Role.CUSTOMER && (
+          <Link
+            href="/customer/orders"
+            className="text-primary text-sm font-medium hover:underline"
+          >
+            Rate a purchased product
+          </Link>
+        )}
+      </div>
       {query.isPending ? (
         <LoadingRegion label="Loading reviews" className="mt-6 space-y-4">
           <Skeleton className="h-4 w-36" />
@@ -40,7 +54,7 @@ export default function ProductReviews({ product }: { product: string }) {
             {query.data.records.map((r) => (
               <article key={r.id} className="py-4">
                 <p className="text-sm font-medium">
-                  {r.score}/5 · Verified purchase ·{" "}
+                  {r.score}/5 · {r.verified ? "Verified purchase · " : ""}
                   {new Date(r.date).toLocaleDateString("en-NG")}
                 </p>
                 {r.title && <h3 className="mt-2 font-medium">{r.title}</h3>}
@@ -52,29 +66,31 @@ export default function ProductReviews({ product }: { product: string }) {
               </article>
             ))}
           </div>
-          <div className="mt-4 flex gap-3">
-            <button
-              disabled={!query.data.isPrevious}
-              className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
-              onClick={() =>
-                setPage({
-                  cursor: query.data.previousCursor,
-                  navigation: "previous",
-                })
-              }
-            >
-              Previous
-            </button>
-            <button
-              disabled={!query.data.isNext}
-              className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
-              onClick={() =>
-                setPage({ cursor: query.data.nextCursor, navigation: "next" })
-              }
-            >
-              Next
-            </button>
-          </div>
+          {(query.data.isPrevious || query.data.isNext) && (
+            <div className="mt-4 flex gap-3">
+              <button
+                disabled={!query.data.isPrevious}
+                className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
+                onClick={() =>
+                  setPage({
+                    cursor: query.data.previousCursor,
+                    navigation: "previous",
+                  })
+                }
+              >
+                Previous
+              </button>
+              <button
+                disabled={!query.data.isNext}
+                className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
+                onClick={() =>
+                  setPage({ cursor: query.data.nextCursor, navigation: "next" })
+                }
+              >
+                Next
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

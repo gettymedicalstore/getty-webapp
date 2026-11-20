@@ -1,10 +1,10 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { Send, ShieldCheck } from "lucide-react"
+import { Send, ShieldCheck, ShieldX } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { DashboardSkeleton } from "@/components/shared/loading-skeletons"
 import ContentError from "@/components/shared/content-error"
@@ -20,8 +20,10 @@ import { cn } from "@/lib/utils"
 import {
   approveManagedProduct,
   getManagedProduct,
+  rejectManagedProduct,
   submitManagedProductForReview,
 } from "../api/product-management"
+import { isOwnProduct } from "../api/product-ownership"
 import ProductOverview from "./product-overview"
 import ProductDetailsForm from "./product-details-form"
 import ProductSpecifications from "./product-specifications"
@@ -54,8 +56,13 @@ export default function ProductWorkspace({
   const pathname = usePathname()
   const session = useAuthSession()
   const [approvalOpen, setApprovalOpen] = useState(false)
+  const [rejectionOpen, setRejectionOpen] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState("")
+  const [rejectionValidation, setRejectionValidation] = useState("")
   const [submissionOpen, setSubmissionOpen] = useState(false)
   const cancelApprovalButton = useRef<HTMLButtonElement>(null)
+  const rejectionInput = useRef<HTMLTextAreaElement>(null)
+  const rejectionInputId = useId()
   const active = tabs.find((tab) => tab.id === params.get("tab")) ?? tabs[0]
   const readScope = workspace === "admin" ? "admin" : "tenant"
   const query = useQuery({
@@ -63,8 +70,25 @@ export default function ProductWorkspace({
     queryFn: () => getManagedProduct(productId, readScope),
   })
   const approval = useProductMutation(productId)
+  const rejection = useProductMutation(productId)
   const submission = useProductMutation(productId)
   const isAdmin = workspace === "admin" && session.data?.user?.role === "admin"
+  const productName = query.data?.product.name ?? ""
+  const ownership = useQuery({
+    queryKey: [
+      "portal",
+      "product-ownership",
+      session.data?.user?.id,
+      session.data?.user?.tenant,
+      productId,
+      productName,
+    ],
+    queryFn: () => isOwnProduct(productId, productName),
+    enabled: isAdmin && Boolean(productName),
+    retry: false,
+  })
+  const canManage =
+    workspace === "supplier" || (isAdmin && ownership.data === true)
   if (query.isPending) return <DashboardSkeleton />
   if (query.isError)
     return (
@@ -80,14 +104,20 @@ export default function ProductWorkspace({
   const data = query.data
   const product = data.product
   const status = product.status.toLowerCase()
-  const isApproved = ["approved", "published", "active"].includes(status)
-  const isSupplierDraft = workspace === "supplier" && status === "draft"
+  const isPendingReview = [
+    "pending",
+    "submitted",
+    "pending_review",
+    "in_review",
+  ].includes(status)
+  const isSupplierSubmittable =
+    workspace === "supplier" && ["draft", "rejected"].includes(status)
   const currency = /^[A-Z]{3}$/.test(valueText(product.currency))
     ? String(product.currency)
     : "NGN"
   return (
-    <div className="min-w-0 space-y-7">
-      <div className="flex min-h-10 items-center justify-end">
+    <div className="min-w-0 space-y-4">
+      <div className="flex min-h-8 items-center justify-end">
         <span
           className={cn(
             "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize",
@@ -129,11 +159,24 @@ export default function ProductWorkspace({
           </Link>
         ))}
       </nav>
+      {isAdmin && !canManage && (
+        <p role="status" className="text-sm text-[#5e6f63]">
+          {ownership.isPending
+            ? "Checking product ownership…"
+            : ownership.isError
+              ? "Product editing is unavailable while ownership cannot be verified."
+              : "This vendor’s product is read-only in the admin workspace."}
+        </p>
+      )}
       <div key={`${productId}:${active.id}`} className="min-w-0 pb-5">
         {active.id === "overview" && (
           <div className="space-y-5">
-            <ProductOverview data={data} currency={currency} />
-            {isSupplierDraft && (
+            <ProductOverview
+              data={data}
+              currency={currency}
+              canManage={canManage}
+            />
+            {isSupplierSubmittable && (
               <section className="rounded-xl border border-[#dfe6e2] bg-white p-5 sm:p-7">
                 <div className="flex items-start gap-3">
                   <Send
@@ -145,11 +188,18 @@ export default function ProductWorkspace({
                       Ready for review?
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-[#68776d]">
-                      You can keep editing this draft. Submit it when the
-                      details are ready for the admin to review.
+                      {status === "rejected"
+                        ? "Update the product based on the review feedback, then send it for another review."
+                        : "You can keep editing this draft. Submit it when the details are ready for the admin to review."}
                     </p>
                   </div>
                 </div>
+                {status === "rejected" && valueText(product.rejection) && (
+                  <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                    <span className="font-semibold">Review feedback: </span>
+                    {valueText(product.rejection)}
+                  </p>
+                )}
                 <Button
                   className="mt-5 rounded-lg text-sm"
                   aria-haspopup="dialog"
@@ -163,9 +213,9 @@ export default function ProductWorkspace({
                 </Button>
               </section>
             )}
-            {isAdmin && (
+            {isAdmin && (isPendingReview || status === "rejected") && (
               <section
-                aria-busy={approval.busy}
+                aria-busy={approval.busy || rejection.busy}
                 className="rounded-xl border border-[#dfe6e2] bg-white p-5 sm:p-7"
               >
                 <div className="flex items-start gap-3">
@@ -178,9 +228,9 @@ export default function ProductWorkspace({
                       Product review
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-[#68776d]">
-                      {isApproved
-                        ? "This product has been approved."
-                        : "Review the product details and specifications before approving this product."}
+                      {status === "rejected"
+                        ? "This product was rejected. The vendor can update it and submit it for review again."
+                        : "Review the product details and specifications before approving or rejecting it."}
                     </p>
                   </div>
                 </div>
@@ -189,10 +239,10 @@ export default function ProductWorkspace({
                     {valueText(product.rejection)}
                   </p>
                 )}
-                {!isApproved && (
-                  <div className="mt-5">
+                {isPendingReview && (
+                  <div className="mt-5 flex flex-wrap gap-3">
                     <Button
-                      disabled={approval.busy}
+                      disabled={approval.busy || rejection.busy}
                       className="rounded-lg text-sm"
                       aria-haspopup="dialog"
                       onClick={() => {
@@ -203,6 +253,20 @@ export default function ProductWorkspace({
                       <ShieldCheck aria-hidden className="size-4" />
                       Approve product
                     </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={approval.busy || rejection.busy}
+                      className="rounded-lg text-sm"
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        rejection.setError("")
+                        setRejectionValidation("")
+                        setRejectionOpen(true)
+                      }}
+                    >
+                      <ShieldX aria-hidden className="size-4" />
+                      Reject product
+                    </Button>
                   </div>
                 )}
               </section>
@@ -210,29 +274,39 @@ export default function ProductWorkspace({
           </div>
         )}
         {active.id === "details" && (
-          <ProductDetailsForm product={productId} readScope={readScope} />
+          <ProductDetailsForm
+            product={productId}
+            readScope={readScope}
+            canManage={canManage}
+          />
         )}
         {active.id === "variants" && (
           <ProductVariants
             product={productId}
             currency={currency}
             readScope={readScope}
+            canManage={canManage}
           />
         )}
         {active.id === "specifications" && (
           <ProductSpecifications
             product={productId}
-            productName={product.name}
             readScope={readScope}
+            canManage={canManage}
           />
         )}
         {active.id === "taxes" && (
-          <ProductTaxAssignments product={productId} readScope={readScope} />
+          <ProductTaxAssignments
+            product={productId}
+            readScope={readScope}
+            canManage={canManage}
+          />
         )}
         {active.id === "photos" && (
           <ProductImageUpload
             product={productId}
             photosLink={data.links?.photos}
+            canManage={canManage}
           />
         )}
       </div>
@@ -268,7 +342,7 @@ export default function ProductWorkspace({
               </Button>
               <Button
                 type="button"
-                disabled={approval.busy || isApproved}
+                disabled={approval.busy || !isPendingReview}
                 onClick={() =>
                   void approval.run(
                     () => approveManagedProduct(productId),
@@ -284,7 +358,91 @@ export default function ProductWorkspace({
           </DialogContent>
         </Dialog>
       )}
-      {isSupplierDraft && (
+      {isAdmin && (
+        <Dialog
+          open={rejectionOpen}
+          onOpenChange={(open) => {
+            if (rejection.busy) return
+            setRejectionOpen(open)
+            if (!open) {
+              rejection.setError("")
+              setRejectionValidation("")
+              setRejectionReason("")
+            }
+          }}
+        >
+          <DialogContent
+            initialFocus={rejectionInput}
+            showCloseButton={!rejection.busy}
+            className="sm:max-w-md"
+          >
+            <DialogTitle>Reject this product?</DialogTitle>
+            <DialogDescription>
+              Tell the vendor what needs to change before you can approve{" "}
+              <strong>{product.name}</strong>.
+            </DialogDescription>
+            <div>
+              <label
+                htmlFor={rejectionInputId}
+                className="mb-2 block text-sm font-medium text-[#414651]"
+              >
+                Reason for rejection
+              </label>
+              <textarea
+                ref={rejectionInput}
+                id={rejectionInputId}
+                value={rejectionReason}
+                onChange={(event) => {
+                  setRejectionReason(event.target.value)
+                  if (rejectionValidation) setRejectionValidation("")
+                }}
+                rows={4}
+                maxLength={1000}
+                disabled={rejection.busy}
+                aria-required="true"
+                aria-invalid={Boolean(rejectionValidation)}
+                className="w-full resize-y rounded-lg border border-[#dce2de] bg-white px-3.5 py-3 text-sm text-[#34453a] outline-none focus-visible:border-[#1b5944] focus-visible:ring-3 focus-visible:ring-[#1b5944]/10"
+                placeholder="Explain what the vendor should correct."
+              />
+            </div>
+            <FormError message={rejectionValidation || rejection.error} />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={rejection.busy}
+                onClick={() => setRejectionOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={rejection.busy || !isPendingReview}
+                onClick={() => {
+                  if (!rejectionReason.trim()) {
+                    setRejectionValidation("Enter a reason for rejection.")
+                    rejectionInput.current?.focus()
+                    return
+                  }
+                  void rejection.run(
+                    () => rejectManagedProduct(productId, rejectionReason),
+                    "Product rejected.",
+                    () => {
+                      setRejectionOpen(false)
+                      setRejectionReason("")
+                    }
+                  )
+                }}
+              >
+                <ShieldX aria-hidden className="size-4" />
+                {rejection.busy ? "Rejecting…" : "Reject product"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {isSupplierSubmittable && (
         <Dialog
           open={submissionOpen}
           onOpenChange={(open) => {

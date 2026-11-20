@@ -20,7 +20,6 @@ import {
 } from "../api/product-management"
 import {
   FormActions,
-  ProductPanelHeading,
   FormError,
   useProductMutation,
   valueText,
@@ -68,9 +67,11 @@ const numberFields = [
 export default function ProductDetailsForm({
   product,
   readScope = "tenant",
+  canManage = true,
 }: {
   product: string
   readScope?: ProductReadScope
+  canManage?: boolean
 }) {
   const query = useQuery({
     queryKey: ["managed-product", product, readScope, "detail"],
@@ -99,7 +100,10 @@ export default function ProductDetailsForm({
     (country) => country.code === selectedOrigin
   )
   async function submit(values: z.output<typeof productDetailsFormSchema>) {
+    if (!canManage) return
     const fields: Record<string, unknown> = { ...values }
+    if (values.youtube === valueText(data?.youtube).trim())
+      delete fields.youtube
     for (const field of [...shortFields, ...longFields])
       fields[field.key] = values[field.key as keyof typeof values] || null
     fields.origin = values.origin || null
@@ -116,10 +120,6 @@ export default function ProductDetailsForm({
   }
   return (
     <div className="w-full max-w-5xl">
-      <ProductPanelHeading
-        title="Product details"
-        description="Add manufacturer information, usage guidance and care requirements."
-      />
       <ValidatedForm
         schema={productDetailsFormSchema}
         onSubmit={submit}
@@ -127,7 +127,7 @@ export default function ProductDetailsForm({
         className="overflow-hidden rounded-xl border border-[#dfe6e2] bg-white shadow-[0_2px_8px_rgba(30,50,35,.025)]"
       >
         <fieldset
-          disabled={mutation.busy}
+          disabled={mutation.busy || !canManage}
           className="min-w-0 divide-y divide-[#e7ece9]"
         >
           <DetailsSection
@@ -164,6 +164,24 @@ export default function ProductDetailsForm({
                 </FormSelect>
               </label>
             </div>
+          </DetailsSection>
+          <DetailsSection
+            title="Product video"
+            description="Add one YouTube video to show customers how this product looks or works."
+          >
+            <FormInputField
+              name="youtube"
+              label="YouTube video link (optional)"
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              defaultValue={valueText(data?.youtube)}
+              containerClassName="min-w-0"
+            />
+            <p className="mt-2 text-xs leading-5 text-[#5e6f63]">
+              Use a public or unlisted video that allows embedding. Clear the
+              link to remove the video. Adding, replacing or removing a video
+              sends a published product back to draft for review.
+            </p>
           </DetailsSection>
           <DetailsSection
             title="Usage and safety"
@@ -235,7 +253,7 @@ export default function ProductDetailsForm({
             </div>
           )}
         </fieldset>
-        <FormActions busy={mutation.busy} />
+        {canManage && <FormActions busy={mutation.busy} />}
       </ValidatedForm>
     </div>
   )

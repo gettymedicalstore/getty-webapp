@@ -78,7 +78,7 @@ export default function CreateAccount({
         }}
       >
         <Plus aria-hidden className="size-4" />
-        Add {kind === "vendor" ? "vendor" : "team profile"}
+        Add {kind === "vendor" ? "vendor" : "user"}
       </Button>
       <Dialog
         open={open}
@@ -96,17 +96,17 @@ export default function CreateAccount({
                 <DialogTitle>
                   {kind === "vendor"
                     ? "Vendor account created"
-                    : "Team profile created"}
+                    : "User created"}
                 </DialogTitle>
                 <DialogDescription>
                   {kind === "vendor"
                     ? "The vendor account is ready to manage from your workspace."
-                    : "The team profile is ready. Login credentials will be sent to their email."}
+                    : "The user is ready. An email with temporary sign-in details has been queued."}
                 </DialogDescription>
               </div>
               <div className="rounded-xl border border-[#e1e9e3] bg-[#f7faf7] px-4 py-3.5">
                 <p className="text-[11px] font-semibold tracking-[0.08em] text-[#708175] uppercase">
-                  {kind === "vendor" ? "Vendor" : "Team member"}
+                  {kind === "vendor" ? "Vendor" : "User"}
                 </p>
                 <p className="mt-1 text-sm font-semibold break-words text-[#263e30]">
                   {createdAccount.name}
@@ -124,12 +124,12 @@ export default function CreateAccount({
           ) : (
             <>
               <DialogTitle>
-                Create {kind === "vendor" ? "vendor account" : "team profile"}
+                Create {kind === "vendor" ? "vendor account" : "user"}
               </DialogTitle>
               <DialogDescription>
                 {kind === "vendor"
                   ? "Add a vendor business and its administrator details."
-                  : "Add a team member and choose their access role."}
+                  : "Add a user and choose their access role."}
               </DialogDescription>
               <ValidatedForm
                 schema={accountFormSchema(kind)}

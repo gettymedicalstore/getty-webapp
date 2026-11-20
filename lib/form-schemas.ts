@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { signupPhoneDetails } from "./signup-phone"
+import { isYouTubeVideoUrl } from "./youtube"
 
 export const textField = (label: string, min = 1, max = 1000) =>
   z
@@ -64,7 +65,14 @@ export const inventoryFilterSchema = searchSchema.extend({
 })
 export const newsletterSchema = z.object({ email: emailField })
 export const trackingSchema = z.object({
-  orderNumber: textField("Order number", 1, 100),
+  orderNumber: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(
+      /^[0-9]{4}-[0-9A-HJKMNP-TV-Z]{4}$/,
+      "Enter an order number such as 2611-K7P4."
+    ),
 })
 export const otpFormSchema = z.object({
   otp: z
@@ -79,6 +87,9 @@ export const signupFormSchema = z
     phone: textField("Phone number", 1, 36),
     country: textField("Country", 2, 2),
     address: textField("Address", 2),
+    agreement: z.boolean().refine(Boolean, {
+      message: "Agree to the Terms of Service to continue.",
+    }),
   })
   .superRefine((values, context) => {
     try {
@@ -145,6 +156,15 @@ export const productDetailsFormSchema = z.object({
   manufacturer: optionalText,
   model: optionalText,
   origin: optionalText,
+  youtube: z
+    .string()
+    .trim()
+    .max(2048, "Use a YouTube link of at most 2,048 characters.")
+    .refine(
+      (value) => value === "" || isYouTubeVideoUrl(value),
+      "Enter a valid YouTube video link."
+    )
+    .default(""),
   usage: optionalText,
   instructions: optionalText,
   warnings: optionalText,

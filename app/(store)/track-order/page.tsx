@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 type TrackOrderPageProps = {
   searchParams: Promise<{
+    code?: string | string[]
     orderNumber?: string | string[]
   }>
 }
@@ -18,7 +19,9 @@ export default async function TrackOrderPage({
 }: TrackOrderPageProps) {
   const resolvedSearchParams = await searchParams
 
-  const orderNumber = getSingleValue(resolvedSearchParams.orderNumber)
+  const orderNumber =
+    getSingleValue(resolvedSearchParams.code) ??
+    getSingleValue(resolvedSearchParams.orderNumber)
 
   return <TrackOrderPageContent initialOrderNumber={orderNumber} />
 }

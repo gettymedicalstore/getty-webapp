@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { syncSession } from "@/features/auth/api/session-store"
 import { currentSession } from "@/features/auth/api/refresh-session"
-import { RotateCcw, Wallet } from "lucide-react"
+import { Wallet } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,7 +75,7 @@ export default function PaymentRecoveryPage() {
       }
       currentSession(expectedSession)
       toast.success(
-        "Request accepted for processing. Refresh to check its outcome."
+        "Request accepted for processing. Its status may take a moment to update."
       )
       setSelected(null)
       await query.refetch()
@@ -95,16 +95,6 @@ export default function PaymentRecoveryPage() {
       <PageHeading
         title="Payment recovery"
         description="Review failed or uncertain payments. Provider verification determines the final payment status."
-        action={
-          <Button
-            variant="outline"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            <RotateCcw aria-hidden className="size-4" />
-            Refresh
-          </Button>
-        }
       />
       <OrderFilters value={filters} onChange={setFilters} datesOnly />
       {query.isPending ? (

@@ -46,6 +46,7 @@ import FulfilmentActionDialog from "./fulfilment-action-dialog"
 import ParcelPhoto from "./parcel-photo"
 import RefundProgress from "./refund-progress"
 import { fulfilmentHistoryAction } from "../api/parcel-photo"
+import RateProductDialog from "@/features/products/components/store/rate-product-dialog"
 
 const actionLabels: Record<OrderAction | "cancel-order", string> = {
   cancel: "Cancel item",
@@ -324,7 +325,7 @@ export function ActionDialog({
                   onClose()
                 }}
               >
-                Refresh order
+                Review latest order
               </Button>
             ) : (
               <Button type="submit" disabled={busy}>
@@ -348,6 +349,10 @@ export default function OrderDetail({
     client = useQueryClient()
   const audience = workspace === "customer" ? "customer" : "vendor"
   const [selection, setSelection] = useState<SelectedAction | null>(null)
+  const [ratingLine, setRatingLine] = useState<OrderLine | null>(null)
+  const [reviewedProducts, setReviewedProducts] = useState<Set<string>>(
+    () => new Set()
+  )
   const [confirmReceipt, setConfirmReceipt] = useState(false)
   const [tab, setTab] = useState("items")
   const query = useQuery({
@@ -424,6 +429,15 @@ export default function OrderDetail({
     .filter((value): value is string => Boolean(value))
     .map(formatDeliveryDate)
     .join(" – ")
+  const productNames = order.items
+    .map((line) => line.name.trim())
+    .filter(Boolean)
+  const orderTitle =
+    productNames.length === 0
+      ? "Order details"
+      : productNames.length === 1
+        ? productNames[0]
+        : `${productNames[0]} and ${productNames.length - 1} more ${productNames.length === 2 ? "product" : "products"}`
   const itemCount = order.items.reduce((sum, line) => sum + line.quantity, 0)
   const tabs = [
     "items",
@@ -435,11 +449,14 @@ export default function OrderDetail({
     <div className="min-w-0 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1.5">
-          <p className="text-muted-foreground text-xs font-medium">
-            Order reference
-          </p>
-          <p className="text-xl font-semibold tracking-tight break-all">
-            {order.orderCode ?? order.reference}
+          <h1 className="text-2xl font-semibold tracking-tight break-words">
+            {orderTitle}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Order reference:{" "}
+            <span className="text-foreground font-medium">
+              {order.orderCode ?? order.reference}
+            </span>
           </p>
           <p className="text-muted-foreground text-xs leading-5">
             Placed {date(order.placed)} · Africa/Lagos
@@ -589,16 +606,19 @@ export default function OrderDetail({
                           </p>
                         )}
                     </div>
-                    <StatusBadge
-                      status={line.status}
-                      label={
-                        line.status === "pending" && order.status === "pending"
-                          ? "Awaiting payment"
-                          : ["cancelled", "returned"].includes(line.status)
-                            ? itemStatusLabels[line.status]
-                            : "Included in Getty delivery"
-                      }
-                    />
+                    {(line.status === "cancelled" ||
+                      line.status === "returned" ||
+                      (line.status === "pending" &&
+                        order.status === "pending")) && (
+                      <StatusBadge
+                        status={line.status}
+                        label={
+                          line.status === "pending"
+                            ? "Awaiting payment"
+                            : itemStatusLabels[line.status]
+                        }
+                      />
+                    )}
                   </div>
                   <dl className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-[#f8faf9] p-4 sm:grid-cols-4">
                     <div>
@@ -641,20 +661,6 @@ export default function OrderDetail({
                       Discount: {formatCurrency(line.discount!, order.currency)}
                     </p>
                   )}
-                  {line.taxes?.length ? (
-                    <ul className="text-muted-foreground mt-3 space-y-1 text-xs leading-5">
-                      {line.taxes.map((tax, index) => (
-                        <li key={`${tax.name}-${index}`}>
-                          {tax.name} ({tax.rate}%) included:{" "}
-                          {formatCurrency(tax.amount, order.currency)}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : line.tax != null && line.tax > 0 ? (
-                    <p className="text-muted-foreground mt-3 text-xs leading-5">
-                      Tax included: {formatCurrency(line.tax, order.currency)}
-                    </p>
-                  ) : null}
                   {line.returnstate !== "none" && (
                     <p className="mt-3 text-sm">
                       Return:{" "}
@@ -663,7 +669,10 @@ export default function OrderDetail({
                       </span>
                     </p>
                   )}
-                  {availableLineActions(audience, order, line).length > 0 && (
+                  {(availableLineActions(audience, order, line).length > 0 ||
+                    (audience === "customer" &&
+                      line.canReview === true &&
+                      !reviewedProducts.has(line.product))) && (
                     <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
                       {availableLineActions(audience, order, line).map(
                         (action) => (
@@ -676,6 +685,17 @@ export default function OrderDetail({
                           </Button>
                         )
                       )}
+                      {audience === "customer" &&
+                        line.canReview === true &&
+                        !reviewedProducts.has(line.product) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setRatingLine(line)}
+                          >
+                            Write a review
+                          </Button>
+                        )}
                     </div>
                   )}
                 </article>
@@ -967,7 +987,6 @@ export default function OrderDetail({
             subtotal={order.subtotal}
             delivery={order.shipping}
             discount={order.discount}
-            tax={order.tax}
             total={order.total}
             currency={order.currency}
             commission={order.commission}
@@ -982,6 +1001,28 @@ export default function OrderDetail({
           workspace={workspace}
           onClose={() => setSelection(null)}
           onUpdated={refresh}
+        />
+      )}
+      {ratingLine && (
+        <RateProductDialog
+          product={ratingLine.product}
+          item={ratingLine.id}
+          name={ratingLine.name}
+          onClose={() => setRatingLine(null)}
+          onSubmitted={() => {
+            setReviewedProducts((current) =>
+              new Set(current).add(ratingLine.product)
+            )
+            setRatingLine(null)
+            void refresh()
+          }}
+          onEligibilityChanged={(status) => {
+            if (status === 409)
+              setReviewedProducts((current) =>
+                new Set(current).add(ratingLine.product)
+              )
+            void refresh()
+          }}
         />
       )}
       {confirmReceipt && order.version && (

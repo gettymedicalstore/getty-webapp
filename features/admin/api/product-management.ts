@@ -71,6 +71,17 @@ export async function approveManagedProduct(product: string) {
   })
 }
 
+export async function rejectManagedProduct(product: string, reason: string) {
+  return mutate("/getty/v1/product/reviews/reject", "POST", {
+    id: validated(id, product, "Select a product to reject."),
+    rejection: validated(
+      z.string().trim().min(1).max(1000),
+      reason,
+      "Enter a rejection reason of up to 1,000 characters."
+    ),
+  })
+}
+
 export function getProductResource(
   product: string,
   resource: "detail",
@@ -118,6 +129,7 @@ const detailsInput = z.object({
   manufacturer: optionalText,
   model: optionalText,
   origin: optionalText,
+  youtube: z.string().trim().max(2048).optional(),
   usage: optionalText,
   instructions: optionalText,
   warnings: optionalText,
@@ -194,9 +206,9 @@ export async function saveProductOverview(
 }
 
 export async function submitManagedProductForReview(data: ManagedProduct) {
-  if (data.product.status.toLowerCase() !== "draft")
+  if (!["draft", "rejected"].includes(data.product.status.toLowerCase()))
     throw new GettyApiError(
-      "Only draft products can be submitted for review.",
+      "Only draft or rejected products can be submitted for review.",
       400
     )
   const variant = data.variants.find((item) => item.isDefault === true)

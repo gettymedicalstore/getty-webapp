@@ -13,11 +13,15 @@ import {
 } from "@/lib/form-schemas"
 import type { BaseSyntheticEvent } from "react"
 
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Plus, Pencil, Trash2, RotateCcw } from "lucide-react"
+import { Plus, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { TableSkeleton } from "@/components/shared/loading-skeletons"
 import ContentError from "@/components/shared/content-error"
@@ -37,6 +41,7 @@ import { portalRecords, changePortalRecord } from "../api/portal"
 import CreateAccount from "./create-account"
 import OrderDashboardSummary from "@/features/orders/components/order-dashboard-summary"
 import RecordRowActions from "./record-row-actions"
+import ProductCategoryPicker from "./product-category-picker"
 
 const screens: Record<
   string,
@@ -196,6 +201,7 @@ export default function ManagementPage({
   const query = useQuery({
     queryKey: ["portal", section, cursor, direction, search],
     queryFn: () => portalRecords(section, `?${q}&limit=50`),
+    placeholderData: isTenantList ? keepPreviousData : undefined,
   })
   const categories = useQuery({
     queryKey: ["portal", "categories"],
@@ -357,16 +363,6 @@ export default function ManagementPage({
                 </Button>
               ) : section === "suppliers" ? (
                 <CreateAccount kind="vendor" />
-              ) : section === "orders" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={query.isFetching}
-                  onClick={() => void query.refetch()}
-                >
-                  <RotateCcw aria-hidden className="size-4" />
-                  Refresh
-                </Button>
               ) : undefined
             }
           />
@@ -412,6 +408,24 @@ export default function ManagementPage({
               records={records}
               title={config.title}
               columns={config.columns}
+              loading={isTenantList && query.isFetching}
+              serverSearch={
+                isTenantList
+                  ? {
+                      value: search,
+                      onChange: (value) => {
+                        const next = new URLSearchParams(params.toString())
+                        const trimmed = value.trim()
+                        if (trimmed) next.set("search", trimmed)
+                        else next.delete("search")
+                        router.replace(
+                          `${pathname}${next.size ? `?${next}` : ""}`,
+                          { scroll: false }
+                        )
+                      },
+                    }
+                  : undefined
+              }
               emptyDescription={
                 section === "suppliers"
                   ? "Add a vendor account to start managing your partners."
@@ -470,36 +484,37 @@ export default function ManagementPage({
                     : undefined
               }
             />
-            {(query.data?.nextCursor || query.data?.previousCursor) && (
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  disabled={!query.data.previousCursor}
-                  onClick={() => {
-                    setPagination({
-                      scope,
-                      direction: "previous",
-                      cursor: query.data!.previousCursor!,
-                    })
-                  }}
-                >
-                  Previous page
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!query.data.nextCursor}
-                  onClick={() => {
-                    setPagination({
-                      scope,
-                      direction: "next",
-                      cursor: query.data!.nextCursor!,
-                    })
-                  }}
-                >
-                  Next page
-                </Button>
-              </div>
-            )}
+            {!query.isPlaceholderData &&
+              (query.data?.nextCursor || query.data?.previousCursor) && (
+                <div className="flex justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    disabled={!query.data.previousCursor}
+                    onClick={() => {
+                      setPagination({
+                        scope,
+                        direction: "previous",
+                        cursor: query.data!.previousCursor!,
+                      })
+                    }}
+                  >
+                    Previous page
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={!query.data.nextCursor}
+                    onClick={() => {
+                      setPagination({
+                        scope,
+                        direction: "next",
+                        cursor: query.data!.nextCursor!,
+                      })
+                    }}
+                  >
+                    Next page
+                  </Button>
+                </div>
+              )}
           </>
         )}
       </div>
@@ -575,23 +590,36 @@ export default function ManagementPage({
                 defaultValue={Number(editing?.rate ?? 0)}
               />
             )}
-            {(section === "products" ||
-              (section === "categories" && !editing)) && (
+            {section === "products" && (
+              <div>
+                <ProductCategoryPicker
+                  records={categories.data?.records}
+                  defaultValue={String(
+                    editing?.categoryId ?? editing?.category ?? ""
+                  )}
+                  disabled={!categories.isSuccess}
+                />
+                {categories.isError && (
+                  <p className="text-destructive mt-2 text-sm">
+                    Unable to load categories. Close and retry.
+                  </p>
+                )}
+              </div>
+            )}
+            {section === "categories" && !editing && (
               <div>
                 <label
                   htmlFor="record-category"
                   className="mb-2 block text-sm font-medium"
                 >
-                  {section === "products" ? "Category" : "Parent category"}
+                  Parent category
                 </label>
                 <FormSelect
                   id="record-category"
-                  name={section === "products" ? "category" : "parent"}
+                  name="parent"
                   required
                   className="form-input"
-                  defaultValue={String(
-                    editing?.categoryId ?? editing?.category ?? ""
-                  )}
+                  defaultValue=""
                 >
                   <option value="">Select a category</option>
                   {categories.data?.records.map((c) => (

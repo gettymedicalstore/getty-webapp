@@ -1,11 +1,10 @@
 "use client"
-import { Heart, Minus, Plus, ShoppingCart, Star } from "lucide-react"
+import { Minus, Plus, ShoppingCart, Star } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useCart } from "@/features/cart/hooks/use-cart"
-import { useWishlist } from "@/features/wishlist/hooks/use-wishlist"
 import {
   isProductInStock,
   productMaximum,
@@ -21,20 +20,11 @@ import {
 } from "../../utils/product-pricing"
 type Props = {
   product: Product
-  isWishlisted?: boolean
   onAddToCart?: (product: Product) => void
-  onToggleWishlist?: (product: Product) => void
 }
-export default function ProductCard({
-  product,
-  isWishlisted: controlled,
-  onAddToCart,
-  onToggleWishlist,
-}: Props) {
+export default function ProductCard({ product, onAddToCart }: Props) {
   const cart = useCart(),
     queryClient = useQueryClient(),
-    wishlist = useWishlist(),
-    saved = controlled ?? wishlist.hasProduct(product.id),
     available = isProductInStock(product),
     choose = product.source === "remote" && !product.variantId,
     line = cart.cart.items.find((item) => item.productId === product.id)
@@ -82,22 +72,6 @@ export default function ProductCard({
             className="p-4 sm:p-5"
           />
         </Link>
-        <button
-          type="button"
-          onClick={() =>
-            onToggleWishlist
-              ? onToggleWishlist(product)
-              : wishlist.toggleProduct(product)
-          }
-          aria-pressed={saved}
-          aria-label={`${saved ? "Remove" : "Save"} ${product.name}${saved ? " from wishlist" : " to wishlist"}`}
-          className={`absolute top-3 right-3 z-10 grid size-11 place-items-center rounded-full border border-[#e2e5eb] bg-white/95 transition hover:border-[#086b43] hover:bg-[#f1f8f4] ${saved ? "text-primary" : "text-[#475467]"}`}
-        >
-          <Heart
-            className={`size-5 ${saved ? "fill-current" : ""}`}
-            aria-hidden
-          />
-        </button>
         {pricing.saving > 0 && (
           <span className="pointer-events-none absolute top-4 left-4 rounded bg-[#174e35] px-2 py-1 text-xs font-semibold text-white">
             {pricing.percent > 0 ? `${pricing.percent}% off` : "Sale"}

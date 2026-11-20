@@ -10,12 +10,10 @@ import {
   Building2,
   Mail,
   Phone,
-  RotateCcw,
   UserRound,
 } from "lucide-react"
 import ContentError from "@/components/shared/content-error"
 import { DashboardSkeleton } from "@/components/shared/loading-skeletons"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { portalTenant } from "../api/portal"
 import AllProductsPage from "./all-products-page"
@@ -217,20 +215,6 @@ export default function TenantWorkspace({
             <p className="mt-2 text-sm text-[#5e6f63]">{label} account</p>
           </div>
         </div>
-        {kind === "customers" && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            <RotateCcw
-              aria-hidden
-              className={cn("size-4", query.isFetching && "animate-spin")}
-            />
-            Refresh
-          </Button>
-        )}
       </div>
       <nav
         aria-label={`${label} sections`}

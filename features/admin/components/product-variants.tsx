@@ -37,10 +37,12 @@ export default function ProductVariants({
   product,
   currency,
   readScope = "tenant",
+  canManage = true,
 }: {
   product: string
   currency: string
   readScope?: ProductReadScope
+  canManage?: boolean
 }) {
   const query = useQuery({
     queryKey: ["managed-product", product, readScope, "variants"],
@@ -53,10 +55,12 @@ export default function ProductVariants({
   const [remove, setRemove] = useState<ProductRecord | null>(null)
   const record = editor?.record
   function edit(record: ProductRecord | null) {
+    if (!canManage) return
     mutation.setError("")
     setEditor({ record })
   }
   async function submit(values: z.output<typeof variantFormSchema>) {
+    if (!canManage) return
     await mutation.run(
       () =>
         saveProductResource(product, "variants", record ? "PATCH" : "POST", {
@@ -86,7 +90,7 @@ export default function ProductVariants({
       () => setEditor(null)
     )
   }
-  if (editor)
+  if (editor && canManage)
     return (
       <FormCard
         title={record ? "Edit variant" : "Add variant"}
@@ -226,13 +230,13 @@ export default function ProductVariants({
   return (
     <section>
       <ProductPanelHeading
-        title="Variants"
-        description="Manage packaging, options and prices. Stock adjustments are available in Inventory."
         action={
-          <Button className="rounded-lg text-sm" onClick={() => edit(null)}>
-            <Plus aria-hidden className="size-4" />
-            Add variant
-          </Button>
+          canManage && (
+            <Button className="rounded-lg text-sm" onClick={() => edit(null)}>
+              <Plus aria-hidden className="size-4" />
+              Add variant
+            </Button>
+          )
         }
       />
       {query.isPending ? (
@@ -260,39 +264,43 @@ export default function ProductVariants({
             { key: "defaultLabel", label: "Default" },
             { key: "status", label: "Status" },
           ]}
-          actions={(item) => (
-            <div className="flex gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={`Edit ${item.name}`}
-                onClick={() => edit(item)}
-              >
-                <Pencil aria-hidden className="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={`Remove ${item.name}`}
-                onClick={() => {
-                  mutation.setError("")
-                  setRemove(item)
-                }}
-              >
-                <Trash2 aria-hidden className="size-4" />
-              </Button>
-            </div>
-          )}
+          actions={
+            canManage
+              ? (item) => (
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${item.name}`}
+                      onClick={() => edit(item)}
+                    >
+                      <Pencil aria-hidden className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Remove ${item.name}`}
+                      onClick={() => {
+                        mutation.setError("")
+                        setRemove(item)
+                      }}
+                    >
+                      <Trash2 aria-hidden className="size-4" />
+                    </Button>
+                  </div>
+                )
+              : undefined
+          }
         />
       )}
       <DeleteProductItem
         name={valueText(remove?.name, "variant")}
-        open={Boolean(remove)}
+        open={canManage && Boolean(remove)}
         onClose={() => setRemove(null)}
         busy={mutation.busy}
         error={mutation.error}
         onConfirm={() => {
-          if (remove)
+          if (canManage && remove)
             void mutation.run(
               () => deleteProductResource(product, "variants", remove.id),
               "Variant removed.",

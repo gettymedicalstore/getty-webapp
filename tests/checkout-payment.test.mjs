@@ -457,11 +457,20 @@ test("checkout and payment recovery persist exact operations scoped to their acc
       recovery.readRecovery(account).payments[sample.checkout.id].id,
       sample.payment.id
     )
+    // Flutterwave can reopen the storefront in a different tab on the same
+    // origin, where session storage is empty but the login is still present.
+    store.clear()
+    assert.equal(recovery.readRecovery(account).order, sample.checkout.id)
+    assert.equal(
+      recovery.readRecovery(account).payments[sample.checkout.id].id,
+      sample.payment.id
+    )
     const next = recovery.paymentOperation(account, sample.checkout.id, true)
     assert.notEqual(next.token, first.token)
     recovery.clearRecovery(account)
     assert.equal(recovery.readRecovery(account).order, undefined)
     assert.equal(store.size, 0)
+    assert.equal(legacy.size, 0)
     window.sessionStorage.setItem = () => {
       throw new Error("Storage disabled")
     }

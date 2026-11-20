@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import AdminDataTable from "@/components/admin/tables/admin-data-table"
 import { ValidatedForm, FormInput } from "./form/validated-form"
 import { searchSchema } from "@/lib/form-schemas"
-import { Search, ListFilter, Inbox } from "lucide-react"
+import { Search, Inbox } from "lucide-react"
 import { cn } from "@/lib/utils"
 export type DisplayRecord = { id: string; [key: string]: unknown }
 export default function RecordTable({
@@ -13,26 +13,34 @@ export default function RecordTable({
   title,
   actions,
   emptyDescription,
+  serverSearch,
+  loading = false,
 }: {
   records: DisplayRecord[]
   columns: { key: string; label: string }[]
   title: string
   actions?: (record: DisplayRecord) => React.ReactNode
   emptyDescription?: string
+  serverSearch?: { value: string; onChange: (value: string) => void }
+  loading?: boolean
 }) {
   const [search, setSearch] = useState("")
+  const [searchResetKey, setSearchResetKey] = useState(0)
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
   const filtered = useMemo(
     () =>
-      records.filter((record) =>
-        columns.some((c) =>
-          String(record[c.key] ?? "")
-            .toLowerCase()
-            .includes(search.toLowerCase())
-        )
-      ),
-    [records, columns, search]
+      serverSearch
+        ? records
+        : records.filter((record) =>
+            columns.some((c) =>
+              String(record[c.key] ?? "")
+                .toLowerCase()
+                .includes(search.toLowerCase())
+            )
+          ),
+    [records, columns, search, serverSearch]
   )
+  const activeSearch = serverSearch?.value ?? search
   const pageIndex = Math.min(
     pagination.pageIndex,
     Math.max(0, Math.ceil(filtered.length / pagination.pageSize) - 1)
@@ -62,15 +70,22 @@ export default function RecordTable({
       <AdminDataTable
         label={title}
         toolbar={
-          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="p-4 sm:px-5">
             <ValidatedForm
+              key={serverSearch ? undefined : searchResetKey}
               schema={searchSchema}
-              autoSubmit={0}
+              autoSubmit={serverSearch ? 350 : 0}
+              defaultValues={{ search: activeSearch }}
+              values={serverSearch ? { search: serverSearch.value } : undefined}
               onSubmit={({ search }) => {
-                setSearch(search)
+                if (serverSearch) {
+                  if (search !== serverSearch.value)
+                    serverSearch.onChange(search)
+                } else setSearch(search)
                 setPagination((p) => ({ ...p, pageIndex: 0 }))
               }}
-              className="relative w-full sm:max-w-xs"
+              role="search"
+              className="relative w-full sm:max-w-sm"
             >
               <Search
                 aria-hidden
@@ -78,20 +93,16 @@ export default function RecordTable({
               />
               <FormInput
                 name="search"
-                aria-label={`Search ${title} in this view`}
+                aria-label={
+                  serverSearch
+                    ? `Search ${title}`
+                    : `Search ${title} in this view`
+                }
                 type="search"
                 placeholder={`Search ${title.toLowerCase()}…`}
-                className="h-11 rounded-lg border-[#e2e8e3] pl-9 text-base shadow-none sm:text-sm"
+                className="h-11 w-full rounded-lg border border-[#dfe7e1] bg-white pr-3 pl-10 text-base text-[#263e30] shadow-none outline-none placeholder:text-[#8b988f] focus-visible:border-[#1b5442] focus-visible:ring-2 focus-visible:ring-[#d7e8dc] sm:text-sm"
               />
             </ValidatedForm>
-            <p
-              role="status"
-              className="flex shrink-0 items-center gap-2 text-xs text-[#68776d]"
-            >
-              <ListFilter aria-hidden className="size-3.5" />
-              {filtered.length} {filtered.length === 1 ? "record" : "records"}{" "}
-              in this view
-            </p>
           </div>
         }
         columns={definitions}
@@ -106,6 +117,7 @@ export default function RecordTable({
         )}
         pagination={{ ...pagination, pageIndex }}
         onPaginationChange={setPagination}
+        loading={loading}
         emptyState={
           <div className="mx-auto flex max-w-xs flex-col items-center px-4">
             <Inbox
@@ -114,18 +126,26 @@ export default function RecordTable({
               strokeWidth={1.5}
             />
             <p className="font-medium text-[#3e5144]">
-              {search ? "No matching records" : `No ${title.toLowerCase()} yet`}
+              {activeSearch
+                ? "No matching records"
+                : `No ${title.toLowerCase()} yet`}
             </p>
             <p className="mt-2 text-xs leading-5 text-[#68776d]">
-              {search
+              {activeSearch
                 ? "Try a different name or clear your search."
                 : (emptyDescription ??
                   `Your ${title.toLowerCase()} will appear here when available.`)}
             </p>
-            {search && (
+            {activeSearch && (
               <button
                 type="button"
-                onClick={() => setSearch("")}
+                onClick={() => {
+                  if (serverSearch) serverSearch.onChange("")
+                  else {
+                    setSearch("")
+                    setSearchResetKey((current) => current + 1)
+                  }
+                }}
                 className="text-primary mt-3 min-h-11 text-xs font-semibold hover:underline"
               >
                 Clear search

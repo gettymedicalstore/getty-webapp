@@ -6,6 +6,8 @@ export const queryKeys = {
       [...queryKeys.products.lists(), filters] as const,
     details: () => [...queryKeys.products.all, "detail"] as const,
     detail: (slug: string) => [...queryKeys.products.details(), slug] as const,
+    related: (id: string) =>
+      [...queryKeys.products.all, "related", id] as const,
     featured: () => [...queryKeys.products.all, "featured"] as const,
     recent: () => [...queryKeys.products.all, "recent"] as const,
   },
@@ -19,9 +21,5 @@ export const queryKeys = {
 
   cart: {
     all: ["cart"] as const,
-  },
-
-  wishlist: {
-    all: ["wishlist"] as const,
   },
 } as const

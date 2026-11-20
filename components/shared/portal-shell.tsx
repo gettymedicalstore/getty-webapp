@@ -253,7 +253,7 @@ export default function PortalShell({
         </header>
         <main
           id="main-content"
-          className="mx-auto w-full max-w-[1440px] min-w-0 px-4 py-6 sm:px-7 sm:py-8 lg:px-9 lg:py-9"
+          className={`mx-auto w-full max-w-[1440px] min-w-0 px-4 sm:px-7 lg:px-9 ${productDetail ? "pt-3 pb-6 sm:pt-4 sm:pb-8 lg:pt-5 lg:pb-9" : "py-6 sm:py-8 lg:py-9"}`}
         >
           <SessionNotice placement="workspace" />
           {children}

@@ -13,12 +13,41 @@ const recoverySchema = z.object({
     )
     .default({}),
 })
+const returnPointerSchema = z.object({
+  order: GettyIdSchema,
+  payment: z.object({ token: z.string().uuid(), id: GettyIdSchema }).optional(),
+})
 export type CheckoutRecovery = z.infer<typeof recoverySchema>
 const key = (account: string) => `getty-checkout-v1:${account}`
+const returnKey = (account: string) => `getty-checkout-return-v1:${account}`
+function readReturnPointer(account: string) {
+  try {
+    return returnPointerSchema.parse(
+      JSON.parse(window.localStorage.getItem(returnKey(account)) ?? "null")
+    )
+  } catch {
+    return null
+  }
+}
+function rememberReturnPointer(
+  account: string,
+  order: string,
+  payment?: { token: string; id: string }
+) {
+  try {
+    window.localStorage.setItem(
+      returnKey(account),
+      JSON.stringify(returnPointerSchema.parse({ order, payment }))
+    )
+  } catch {
+    // Same-tab returns still have the session-storage recovery record.
+  }
+}
 export function readRecovery(account: string): CheckoutRecovery {
   if (typeof window === "undefined") return { payments: {} }
   try {
     const raw = window.sessionStorage.getItem(key(account))
+    let current: CheckoutRecovery = { payments: {} }
     if (!raw) {
       // Preserve unresolved checkouts from the previous local-storage version.
       const legacy = window.localStorage.getItem(key(account))
@@ -26,10 +55,23 @@ export function readRecovery(account: string): CheckoutRecovery {
         const migrated = recoverySchema.parse(JSON.parse(legacy))
         window.sessionStorage.setItem(key(account), JSON.stringify(migrated))
         window.localStorage.removeItem(key(account))
-        return migrated
+        current = migrated
       }
+    } else {
+      current = recoverySchema.parse(JSON.parse(raw))
     }
-    return raw ? recoverySchema.parse(JSON.parse(raw)) : { payments: {} }
+    const pointer = readReturnPointer(account)
+    if (!pointer) return current
+    return {
+      ...current,
+      order: pointer.order,
+      payments: pointer.payment
+        ? {
+            ...current.payments,
+            [pointer.order]: current.payments[pointer.order] ?? pointer.payment,
+          }
+        : current.payments,
+    }
   } catch {
     return { payments: {} }
   }
@@ -50,10 +92,12 @@ export function clearRecovery(account: string) {
   } catch {
     // Signing out must still work when the browser blocks storage.
   }
-  try {
-    window.localStorage.removeItem(key(account))
-  } catch {
-    // The former storage location may also be unavailable.
+  for (const storageKey of [key(account), returnKey(account)]) {
+    try {
+      window.localStorage.removeItem(storageKey)
+    } catch {
+      // Clearing the login must still work when browser storage is blocked.
+    }
   }
 }
 export function rememberCheckout(account: string, command: CheckoutCommand) {
@@ -77,7 +121,14 @@ export function noteCheckoutIssue(account: string, message: string) {
 }
 export function rememberOrder(account: string, order: string) {
   const current = readRecovery(account)
-  return saveRecovery(account, { payments: current.payments, order })
+  const saved = saveRecovery(account, { payments: current.payments, order })
+  const payment = current.payments[order]
+  rememberReturnPointer(
+    account,
+    order,
+    payment?.id ? { token: payment.token, id: payment.id } : undefined
+  )
+  return saved
 }
 export function forgetCheckout(account: string) {
   const current = readRecovery(account)
@@ -114,4 +165,5 @@ export function rememberPayment(
     order,
     payments: { ...current.payments, [order]: { token, id } },
   })
+  rememberReturnPointer(account, order, { token, id })
 }

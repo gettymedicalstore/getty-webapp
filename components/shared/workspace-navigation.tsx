@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useId, useState } from "react"
+import { Fragment, useId, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import {
   workspaceMenus,
   isWorkspaceLinkActive,
@@ -25,31 +26,57 @@ export default function WorkspaceNavigation({
   appearance?: NavigationAppearance
 }) {
   const pathname = usePathname()
+  const session = useAuthSession()
+  const canViewProfiles = ["admin", "superadmin"].includes(
+    session.data?.user?.profileRole ?? ""
+  )
   return (
     <nav
       aria-label={`${role === "supplier" ? "Vendor" : role === "customer" ? "Consumer" : "Admin"} navigation`}
     >
       <ul className="space-y-1">
-        {workspaceMenus[role].map((item) => (
-          <li key={item.label}>
-            {"children" in item ? (
-              <ProductGroup
-                key={pathname}
-                group={item}
-                pathname={pathname}
-                onNavigate={onNavigate}
-                appearance={appearance}
-              />
-            ) : (
-              <NavigationLink
-                item={item}
-                pathname={pathname}
-                onNavigate={onNavigate}
-                appearance={appearance}
-              />
-            )}
-          </li>
-        ))}
+        {workspaceMenus[role]
+          .filter((item) =>
+            "profileAdminsOnly" in item && item.profileAdminsOnly
+              ? canViewProfiles
+              : true
+          )
+          .map((item) => (
+            <Fragment key={item.label}>
+              {item.sectionLabel && (
+                <li
+                  className={cn(
+                    "mt-5 border-t px-3 pt-5 pb-2 first:mt-0 first:border-t-0 first:pt-0",
+                    appearance === "dark"
+                      ? "border-[#2c5b49] text-[#8eb9a6]"
+                      : "border-[#e6ebe7] text-[#607767]"
+                  )}
+                >
+                  <h2 className="text-[11px] font-semibold tracking-[0.16em] uppercase">
+                    {item.sectionLabel}
+                  </h2>
+                </li>
+              )}
+              <li>
+                {"children" in item ? (
+                  <NavigationGroup
+                    key={pathname}
+                    group={item}
+                    pathname={pathname}
+                    onNavigate={onNavigate}
+                    appearance={appearance}
+                  />
+                ) : (
+                  <NavigationLink
+                    item={item}
+                    pathname={pathname}
+                    onNavigate={onNavigate}
+                    appearance={appearance}
+                  />
+                )}
+              </li>
+            </Fragment>
+          ))}
       </ul>
     </nav>
   )
@@ -100,7 +127,7 @@ function NavigationLink({
   )
 }
 
-function ProductGroup({
+function NavigationGroup({
   group,
   pathname,
   onNavigate,

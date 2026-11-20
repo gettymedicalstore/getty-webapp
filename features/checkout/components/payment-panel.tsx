@@ -74,6 +74,7 @@ function PaymentStatus({
     retry: false,
   })
   const order = orderQuery.data
+  const refetchOrder = orderQuery.refetch
   const blocking = order && blockingCharge(order)
   const paymentId =
     blocking?.id ??
@@ -98,6 +99,22 @@ function PaymentStatus({
   })
   const payment = paymentQuery.data
   const paymentStatus = payment?.status
+  useEffect(() => {
+    if (
+      payment?.kind !== "charge" ||
+      paymentStatus !== "succeeded" ||
+      order?.status !== "pending"
+    )
+      return
+    const timer = window.setInterval(() => {
+      if (
+        document.visibilityState !== "hidden" &&
+        Date.now() - pollStarted < 120000
+      )
+        void refetchOrder()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [order?.status, refetchOrder, payment?.kind, paymentStatus, pollStarted])
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 1000)
     return () => window.clearInterval(timer)
@@ -298,6 +315,12 @@ function PaymentStatus({
                 : paid
                   ? "Your payment has been verified. We’re waiting for the latest order status."
                   : payment?.failure || null}
+        {paid && !confirmed && !closed && clock - pollStarted > 120000 && (
+          <p className="mt-2">
+            The order is still being updated. Check this page again shortly or
+            open your order for its latest status.
+          </p>
+        )}
         {payment?.status === "unknown" && payment.failure && (
           <p className="mt-2">Getty reports: {payment.failure}</p>
         )}

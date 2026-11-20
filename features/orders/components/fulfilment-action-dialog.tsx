@@ -1,6 +1,7 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import Image from "next/image"
 import { z } from "zod"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -81,12 +82,29 @@ export default function FulfilmentActionDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [parcelPhoto, setParcelPhoto] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const photoPreviewUrl = useRef<string | null>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const [photoStage, setPhotoStage] = useState<
     "uploading" | "verifying" | null
   >(null)
   const [conflict, setConflict] = useState(false)
   const running = useRef(false)
+  useEffect(
+    () => () => {
+      if (photoPreviewUrl.current) URL.revokeObjectURL(photoPreviewUrl.current)
+    },
+    []
+  )
+
+  function selectParcelPhoto(file: File | null) {
+    if (photoPreviewUrl.current) URL.revokeObjectURL(photoPreviewUrl.current)
+    const preview = file ? URL.createObjectURL(file) : null
+    photoPreviewUrl.current = preview
+    setPhotoPreview(preview)
+    setParcelPhoto(file)
+  }
+
   const action = selection.action
   const dispatch = action === "dispatch"
   const staffDelivery = action === "deliver" && audience === "operations"
@@ -341,10 +359,23 @@ export default function FulfilmentActionDialog({
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={(event) =>
-                    setParcelPhoto(event.currentTarget.files?.[0] ?? null)
+                    selectParcelPhoto(event.currentTarget.files?.[0] ?? null)
                   }
                   className="file:bg-primary file:text-primary-foreground w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-2"
                 />
+                {photoPreview && (
+                  <div className="rounded-lg border p-3">
+                    <p className="mb-2 text-sm font-medium">Photo preview</p>
+                    <Image
+                      src={photoPreview}
+                      alt="Selected packed parcel photo preview"
+                      width={480}
+                      height={320}
+                      unoptimized
+                      className="bg-muted max-h-56 w-full rounded-md object-contain"
+                    />
+                  </div>
+                )}
                 <p className="text-muted-foreground text-xs">
                   Use a photo of the packed parcel without readable recipient
                   labels.
@@ -355,7 +386,7 @@ export default function FulfilmentActionDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setParcelPhoto(null)
+                      selectParcelPhoto(null)
                       if (photoInput.current) photoInput.current.value = ""
                     }}
                   >

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowRight, RotateCw } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { useAuthSession } from "@/features/auth/hooks/use-auth-session"
 import { Button } from "@/components/ui/button"
 import {
@@ -78,24 +78,11 @@ export default function FulfilmentQueue({
   const records = query.data?.items ?? []
   return (
     <div className="min-w-0 space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-muted-foreground text-sm">
-            {view === "orders"
-              ? "Review all orders and their current status."
-              : "Coordinate supplier handover, Getty packing and delivery."}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          <RotateCw className="mr-2 size-4" aria-hidden />
-          Refresh
-        </Button>
-      </div>
+      <p className="text-muted-foreground text-sm">
+        {view === "orders"
+          ? "Review all orders and their current status."
+          : "Coordinate supplier handover, Getty packing and delivery."}
+      </p>
       {view === "fulfilment" && (
         <div
           className="flex gap-2 overflow-x-auto pb-1"

@@ -6,6 +6,7 @@ import { gettyUrl } from "@/lib/api/config"
 import {
   GettyIdSchema,
   CatalogPageResponseSchema,
+  RelatedProductsResponseSchema,
   ProductDetailResponseSchema,
   CategoriesResponseSchema,
   PhotoPageResponseSchema,
@@ -205,6 +206,24 @@ export async function getLiveProduct(slug: string): Promise<Product | null> {
     if (error instanceof BackendError && error.status === 404) return null
     throw error
   }
+}
+
+export async function getRelatedProducts(
+  productId: string
+): Promise<Product[]> {
+  const id = GettyIdSchema.parse(productId)
+  const result = RelatedProductsResponseSchema.safeParse(
+    await backendRequest(
+      `/getty/ecommerce/catalog/products/${id}/related?inStock=true&limit=6`,
+      {},
+      "public"
+    )
+  )
+  if (!result.success)
+    throw new BackendError("The related products response is incomplete.")
+  return result.data.data
+    .filter((product) => product.id !== id && product.inStock)
+    .map(mapProduct)
 }
 
 export async function getProductReviews(

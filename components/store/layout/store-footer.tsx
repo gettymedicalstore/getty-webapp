@@ -12,7 +12,6 @@ import Link from "next/link"
 const categoryLinks = [
   { label: "All products", href: "/products" },
   { label: "Shop by category", href: "/categories" },
-  { label: "Your wishlist", href: "/wishlist" },
   { label: "Become a supplier", href: "/supplier/register" },
 ]
 
@@ -22,7 +21,7 @@ const supportLinks = [
     href: "/contact",
   },
   {
-    label: "Terms & Conditions",
+    label: "Terms & returns",
     href: "/terms",
   },
 ]
