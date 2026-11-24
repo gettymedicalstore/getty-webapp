@@ -169,6 +169,7 @@ const overviewInput = z.object({
   price: number,
   quantity: number.int(),
 })
+const updateOverviewInput = overviewInput.omit({ quantity: true })
 
 async function mutate(path: string, method: string, input?: unknown) {
   const result = await apiRequest<{ data?: unknown }>(path, {
@@ -198,9 +199,9 @@ export async function saveProductOverview(
   status?: "draft"
 ) {
   const body = validated(
-    overviewInput,
+    updateOverviewInput,
     { ...fields, id: product },
-    "Enter the product name, category, description, price and stock quantity."
+    "Enter the product name, category, description and price."
   )
   return mutate(base, "PATCH", status === "draft" ? { ...body, status } : body)
 }

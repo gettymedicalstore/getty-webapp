@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ContentError from "@/components/shared/content-error"
@@ -17,6 +17,7 @@ import {
   hostedPaymentLink,
   money,
   startPayment,
+  verifyPayment,
 } from "../api/checkout"
 import {
   paymentOperation,
@@ -67,6 +68,7 @@ function PaymentStatus({
   const submitting = useRef(false)
   const redirectRequested = useRef(autoContinue)
   const redirecting = useRef(false)
+  const verifiedOnReturn = useRef(new Set<string>())
   const orderQuery = useQuery({
     queryKey: ["purchase-payment", account, orderId],
     enabled: Boolean(account),
@@ -80,9 +82,30 @@ function PaymentStatus({
     blocking?.id ??
     selectedId ??
     order?.payments.filter((p) => p.kind === "charge").at(-1)?.id
+  const verification = useMutation({
+    mutationFn: (id: string) => verifyPayment(orderId, id),
+    retry: false,
+    onMutate: (id) =>
+      client.cancelQueries({
+        queryKey: ["purchase-attempt", account, orderId, id],
+      }),
+    onSuccess: (result) => {
+      if (readSession().user?.id !== account) return
+      client.setQueryData(
+        ["purchase-attempt", account, orderId, result.id],
+        result
+      )
+    },
+    onSettled: () => {
+      if (readSession().user?.id !== account) return
+      return client.invalidateQueries({
+        queryKey: ["purchase-payment", account, orderId],
+      })
+    },
+  })
   const paymentQuery = useQuery({
     queryKey: ["purchase-attempt", account, orderId, paymentId],
-    enabled: Boolean(account && order && paymentId),
+    enabled: Boolean(account && order && paymentId) && !verification.isPending,
     queryFn: ({ signal }) => getPayment(orderId, paymentId!, signal),
     retry: false,
     refetchInterval: (query) => {
@@ -99,11 +122,22 @@ function PaymentStatus({
   })
   const payment = paymentQuery.data
   const paymentStatus = payment?.status
+  const verify = verification.mutate
   useEffect(() => {
     if (
+      !returnPage ||
+      !account ||
       payment?.kind !== "charge" ||
-      paymentStatus !== "succeeded" ||
-      order?.status !== "pending"
+      verifiedOnReturn.current.has(payment.id)
+    )
+      return
+    verifiedOnReturn.current.add(payment.id)
+    verify(payment.id)
+  }, [account, returnPage, payment?.kind, payment?.id, verify])
+  useEffect(() => {
+    if (
+      order?.status !== "pending" ||
+      (!returnPage && paymentStatus !== "succeeded")
     )
       return
     const timer = window.setInterval(() => {
@@ -114,7 +148,7 @@ function PaymentStatus({
         void refetchOrder()
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [order?.status, refetchOrder, payment?.kind, paymentStatus, pollStarted])
+  }, [order?.status, refetchOrder, paymentStatus, pollStarted, returnPage])
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 1000)
     return () => window.clearInterval(timer)
@@ -209,6 +243,16 @@ function PaymentStatus({
       setBusy(false)
     }
   }
+  async function checkStatus() {
+    if (verification.isPending) return
+    setPollStarted(Date.now())
+    if (paymentId) {
+      // Mutation errors are displayed below and can be retried explicitly.
+      verification.mutate(paymentId)
+    } else {
+      await refetchOrder()
+    }
+  }
   if (orderQuery.isPending)
     return (
       <div role="status" className="rounded-2xl border bg-white p-8">
@@ -266,13 +310,13 @@ function PaymentStatus({
         ? "Payment received · checking your order"
         : payment?.status === "unknown"
           ? "Your payment is being checked"
-          : payment?.status === "created"
+          : payment?.status === "created" && !returnPage
             ? "Preparing secure payment"
             : payment?.status === "failed"
               ? "Payment was unsuccessful"
               : payment?.status === "cancelled"
                 ? "Payment attempt closed"
-                : returnPage && payment
+                : returnPage
                   ? "Checking your payment"
                   : "Complete your order"
   return (
@@ -307,14 +351,18 @@ function PaymentStatus({
           : confirmed
             ? "We’ve received your order. Follow each item's delivery progress in your orders."
             : payment?.status === "unknown"
-              ? "Getty has not resolved this payment attempt yet. We can’t safely open checkout or start another charge until its status is confirmed. Refresh this page later, or contact support if this continues."
+              ? "Getty has not resolved this payment attempt yet. We can’t safely start another charge until its status is confirmed. Check again shortly, or contact support if this continues."
               : preparingPaymentLink
                 ? returnPage
-                  ? "Getty is preparing your secure payment link. Check this page again shortly."
+                  ? "We’re checking this payment with Getty. Your order will appear here once Getty confirms it."
                   : "Preparing your secure payment link. The payment page will open when it is ready."
                 : paid
                   ? "Your payment has been verified. We’re waiting for the latest order status."
-                  : payment?.failure || null}
+                  : returnPage && payment?.status === "pending"
+                    ? "We’re checking this payment with Getty. Your order will appear here once Getty confirms it."
+                    : returnPage && !payment
+                      ? "We’re checking the payment and order with Getty. This page will update when the order is confirmed."
+                      : payment?.failure || null}
         {paid && !confirmed && !closed && clock - pollStarted > 120000 && (
           <p className="mt-2">
             The order is still being updated. Check this page again shortly or
@@ -324,7 +372,7 @@ function PaymentStatus({
         {payment?.status === "unknown" && payment.failure && (
           <p className="mt-2">Getty reports: {payment.failure}</p>
         )}
-        {order.status === "pending" && (
+        {order.status === "pending" && !returnPage && (
           <p className="mt-2">
             {seconds > 0
               ? `Stock reserved for ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.`
@@ -335,7 +383,9 @@ function PaymentStatus({
           ["created", "pending", "unknown"].includes(payment.status) &&
           clock - pollStarted > 120000 && (
             <p className="mt-2">
-              Automatic checks have paused. Refresh this page to check again.
+              {returnPage
+                ? "Automatic checks have paused. Use Check status to check again."
+                : "Automatic checks have paused. Reload this page to check again."}
             </p>
           )}
       </div>
@@ -352,7 +402,15 @@ function PaymentStatus({
           We couldn’t check this payment. {paymentQuery.error.message}
         </p>
       )}
-      {unsupportedPaymentLink && (
+      {verification.isError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800"
+        >
+          We couldn’t verify this payment. {verification.error.message}
+        </p>
+      )}
+      {unsupportedPaymentLink && !returnPage && (
         <p
           role="alert"
           className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
@@ -362,7 +420,7 @@ function PaymentStatus({
         </p>
       )}
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {link && (
+        {link && !returnPage && (
           <a
             className="bg-primary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold text-white"
             href={link}
@@ -371,7 +429,7 @@ function PaymentStatus({
             Proceed to payment
           </a>
         )}
-        {canPay && (
+        {canPay && !returnPage && (
           <Button
             disabled={busy || orderQuery.isFetching}
             onClick={() => void beginPayment()}
@@ -381,6 +439,22 @@ function PaymentStatus({
               : payment
                 ? "Try payment again"
                 : "Proceed to payment"}
+          </Button>
+        )}
+        {returnPage && !confirmed && (
+          <Button
+            disabled={
+              verification.isPending ||
+              orderQuery.isFetching ||
+              paymentQuery.isFetching
+            }
+            onClick={() => void checkStatus()}
+          >
+            {verification.isPending ||
+            orderQuery.isFetching ||
+            paymentQuery.isFetching
+              ? "Checking status…"
+              : "Check status"}
           </Button>
         )}
         <Link

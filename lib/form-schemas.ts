@@ -149,9 +149,11 @@ export const productFormSchema = z.object({
   price: numericField("Price", 0.01),
   quantity: numericField("Quantity", 0, Number.MAX_SAFE_INTEGER, true),
 })
-export const productOverviewFormSchema = productFormSchema.extend({
-  price: numericField("Price"),
-})
+export const productOverviewFormSchema = productFormSchema
+  .omit({ quantity: true })
+  .extend({
+    price: numericField("Price"),
+  })
 export const productDetailsFormSchema = z.object({
   manufacturer: optionalText,
   model: optionalText,

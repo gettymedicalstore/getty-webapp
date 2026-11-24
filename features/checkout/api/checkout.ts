@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { GettyIdSchema } from "@/lib/api/getty-contract"
+import { apiRequest } from "@/lib/api/client"
 import { apiData } from "@/lib/api/data"
 import { deliverySchema, type Delivery } from "../schemas/checkout-schema"
 
@@ -141,6 +142,19 @@ export async function getPayment(
   if (result.purchase !== order || result.id !== payment)
     throw new Error("The payment does not match this order.")
   return result
+}
+export async function verifyPayment(
+  order: string,
+  payment: string,
+  signal?: AbortSignal
+) {
+  await apiRequest(
+    `${root}/${GettyIdSchema.parse(order)}/payments/${GettyIdSchema.parse(payment)}/verify`,
+    { method: "POST", signal }
+  )
+  // Verification may be queued. Read the payment instead of treating an
+  // accepted verification request as proof that payment succeeded.
+  return getPayment(order, payment, signal)
 }
 export const money = (value: number, currency = "NGN") =>
   new Intl.NumberFormat("en-NG", { style: "currency", currency }).format(value)

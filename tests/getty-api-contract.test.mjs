@@ -2651,7 +2651,7 @@ test("product tax assignment attaches and removes a rate without deleting the ta
   assert.equal(calls.length, 3)
 })
 
-test("ordinary product editing cannot submit review fields or a different product ID", async (t) => {
+test("ordinary product editing omits quantity, review fields and a different product ID", async (t) => {
   const fields = {
     name: "Gloves",
     brand: "Fixture",
@@ -2659,7 +2659,6 @@ test("ordinary product editing cannot submit review fields or a different produc
     description: "Nitrile gloves",
     currency: "NGN",
     price: 100,
-    quantity: 0,
   }
   mock(t, (url, options) => {
     assert.equal(url.pathname, "/getty/v1/product/products")
@@ -2668,8 +2667,10 @@ test("ordinary product editing cannot submit review fields or a different produc
     return Response.json(envelope("OK"))
   })
   session.saveSession({ ...fixtureUser, role: "supplier" }, "fixture-access")
+  await saveProductOverview(ids[0], fields)
   await saveProductOverview(ids[0], {
     ...fields,
+    quantity: "not editable",
     id: ids[3],
     status: "approved",
     reviewed: "now",
@@ -2696,6 +2697,8 @@ test("vendor draft creation sends the selected status and later submission sends
     price: 100,
     quantity: 8,
   }
+  const updateFields = { ...fields }
+  delete updateFields.quantity
   await changePortalRecord("products", "POST", { ...fields, status: "draft" })
   await changePortalRecord("products", "POST", { ...fields, status: "pending" })
   await saveProductOverview(ids[0], { ...fields, brand: "" }, "draft")
@@ -2735,7 +2738,7 @@ test("vendor draft creation sends the selected status and later submission sends
     {
       url: "/getty/v1/product/products",
       method: "PATCH",
-      body: { id: ids[0], ...fields, brand: "", status: "draft" },
+      body: { id: ids[0], ...updateFields, brand: "", status: "draft" },
     },
     {
       url: "/getty/v1/product/products",

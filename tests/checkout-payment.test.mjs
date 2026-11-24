@@ -26,6 +26,7 @@ require.extensions[".ts"] = (module, filename) =>
     filename
   )
 const dataApi = require("../lib/api/data.ts")
+const clientApi = require("../lib/api/client.ts")
 const api = require("../features/checkout/api/checkout.ts")
 const addresses = require("../features/checkout/api/addresses.ts")
 const recovery = require("../features/checkout/api/recovery.ts")
@@ -282,6 +283,101 @@ test("checkout and payment use documented IDs and bodies, and reject mismatched 
     )
   } finally {
     dataApi.apiData = original
+  }
+})
+test("payment confirmation posts to verify before reading the canonical payment", async () => {
+  const originalRequest = clientApi.apiRequest
+  const originalData = dataApi.apiData
+  const calls = []
+  const controller = new AbortController()
+  const paymentPath = `/getty/v1/order/${sample.checkout.id}/payments/${sample.payment.id}`
+  clientApi.apiRequest = async (path, options = {}) => {
+    calls.push({ path, ...options })
+    // Verification may acknowledge processing without returning a payment.
+    return { success: true, message: "Verification requested" }
+  }
+  dataApi.apiData = async (path, options = {}) => {
+    calls.push({ path, ...options })
+    return { ...sample.payment, status: "succeeded", link: null }
+  }
+  try {
+    const result = await api.verifyPayment(
+      sample.checkout.id,
+      sample.payment.id,
+      controller.signal
+    )
+    assert.equal(result.status, "succeeded")
+    assert.deepEqual(
+      calls.map(({ path, method = "GET", body, signal }) => ({
+        path,
+        method,
+        body,
+        signal,
+      })),
+      [
+        {
+          path: `${paymentPath}/verify`,
+          method: "POST",
+          body: undefined,
+          signal: controller.signal,
+        },
+        {
+          path: paymentPath,
+          method: "GET",
+          body: undefined,
+          signal: controller.signal,
+        },
+      ]
+    )
+  } finally {
+    clientApi.apiRequest = originalRequest
+    dataApi.apiData = originalData
+  }
+})
+test("payment verification rejects invalid IDs, failed verification, and unrelated payment responses", async () => {
+  const originalRequest = clientApi.apiRequest
+  const originalData = dataApi.apiData
+  let requests = 0
+  let reads = 0
+  let failure = null
+  clientApi.apiRequest = async () => {
+    requests++
+    if (failure) throw failure
+    return {}
+  }
+  dataApi.apiData = async () => {
+    reads++
+    return {
+      ...sample.payment,
+      purchase: "11111111-1111-4111-8111-000000000999",
+    }
+  }
+  try {
+    await assert.rejects(() =>
+      api.verifyPayment("invalid/order", sample.payment.id)
+    )
+    await assert.rejects(() =>
+      api.verifyPayment(sample.checkout.id, "invalid/payment")
+    )
+    assert.equal(requests, 0)
+    assert.equal(reads, 0)
+    failure = new Error("Provider verification is temporarily unavailable")
+    await assert.rejects(
+      () => api.verifyPayment(sample.checkout.id, sample.payment.id),
+      failure
+    )
+    assert.equal(requests, 1)
+    assert.equal(reads, 0)
+    failure = null
+    await assert.rejects(
+      () => api.verifyPayment(sample.checkout.id, sample.payment.id),
+      /does not match/
+    )
+    assert.equal(requests, 2)
+    assert.equal(reads, 1)
+  } finally {
+    clientApi.apiRequest = originalRequest
+    dataApi.apiData = originalData
   }
 })
 test("only pending charges on unexpired pending orders can reopen a secure hosted link", () => {

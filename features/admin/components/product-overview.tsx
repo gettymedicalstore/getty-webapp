@@ -58,7 +58,6 @@ export default function ProductOverview({
             description: values.description,
             currency,
             price: values.price,
-            quantity: values.quantity,
           },
           product.status.toLowerCase() === "draft" ? "draft" : undefined
         ),
@@ -122,23 +121,12 @@ export default function ProductOverview({
                 className="rounded-lg border-[#dce2de] text-base sm:text-sm"
               />
             </label>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <PriceInput
-                id="default-product-price"
-                label={`Default price (${currency})`}
-                currency={currency}
-                defaultValue={valueText(variant?.price)}
-              />
-              <FormInputField
-                name="quantity"
-                label="Default stock quantity"
-                required
-                type="number"
-                min={0}
-                step={1}
-                defaultValue={valueText(variant?.quantity)}
-              />
-            </div>
+            <PriceInput
+              id="default-product-price"
+              label={`Default price (${currency})`}
+              currency={currency}
+              defaultValue={valueText(variant?.price)}
+            />
             <FormError message={mutation.error} />
           </fieldset>
           <FormActions

@@ -46,9 +46,12 @@ export default function CartOrderSummary({ items }: { items: CartItem[] }) {
           <dt className="text-muted-foreground">Delivery</dt>
           <dd className="text-right">Calculated at checkout</dd>
         </div>
-        <div className="flex justify-between gap-4 border-t pt-5 text-lg font-semibold">
-          <dt>Estimated total before delivery</dt>
-          <dd className="text-right [overflow-wrap:anywhere]">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t pt-5">
+          <dt className="text-muted-foreground leading-5">
+            Estimated total
+            <span className="block text-xs">Before delivery</span>
+          </dt>
+          <dd className="text-right text-base font-medium whitespace-nowrap text-[#23412d] tabular-nums">
             {formatCurrency(subtotal)}
           </dd>
         </div>

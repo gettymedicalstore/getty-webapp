@@ -110,6 +110,20 @@ test("empty, negative, non-finite and fractional product stock is rejected", () 
   )
 })
 
+test("product updates do not require or retain stock quantity", () => {
+  const fields = { ...product }
+  delete fields.quantity
+  assert.equal(
+    schemas.productOverviewFormSchema.safeParse(fields).success,
+    true
+  )
+  assert.equal(
+    "quantity" in schemas.productOverviewFormSchema.parse(product),
+    false
+  )
+  assert.equal(schemas.productFormSchema.safeParse(fields).success, false)
+})
+
 test("signup validates the selected country and phone together", () => {
   assert.equal(schemas.signupFormSchema.safeParse(signup).success, true)
   for (const values of [
